@@ -1,0 +1,9 @@
+../Core/Src/cdc_logger.c:23:17:ring_used	16	static
+../Core/Src/cdc_logger.c:29:17:ring_free	24	static
+../Core/Src/cdc_logger.c:37:13:dcache_clean_txpkt	40	static,ignoring_inline_asm
+../Core/Src/cdc_logger.c:52:6:CDC_LOG_Init	4	static,ignoring_inline_asm
+../Core/Src/cdc_logger.c:63:10:CDC_LOG_GetDroppedCount	4	static
+../Core/Src/cdc_logger.c:68:6:CDC_LOG_Push	32	static,ignoring_inline_asm
+../Core/Src/cdc_logger.c:98:6:CDC_Log	16	static
+../Core/Src/cdc_logger.c:108:6:CDC_LOG_Task	32	static,ignoring_inline_asm
+../Core/Src/cdc_logger.c:150:6:CDC_LOG_TxCpltCallback	4	static
