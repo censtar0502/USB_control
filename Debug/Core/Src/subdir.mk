@@ -7,16 +7,11 @@
 C_SRCS += \
 ../Core/Src/app.c \
 ../Core/Src/cdc_logger.c \
-../Core/Src/gkl_commands.c \
 ../Core/Src/gkl_link.c \
-../Core/Src/gkl_parsing.c \
 ../Core/Src/keyboard.c \
 ../Core/Src/main.c \
 ../Core/Src/pump_mgr.c \
-../Core/Src/pump_mgr_transactions.c \
-../Core/Src/pump_proto_azt.c \
 ../Core/Src/pump_proto_gkl.c \
-../Core/Src/pump_proto_sanki.c \
 ../Core/Src/settings.c \
 ../Core/Src/ssd1309.c \
 ../Core/Src/stm32h7xx_hal_msp.c \
@@ -24,22 +19,16 @@ C_SRCS += \
 ../Core/Src/syscalls.c \
 ../Core/Src/sysmem.c \
 ../Core/Src/system_stm32h7xx.c \
-../Core/Src/ui.c \
-../Core/Src/ui_transactions.c 
+../Core/Src/ui.c 
 
 OBJS += \
 ./Core/Src/app.o \
 ./Core/Src/cdc_logger.o \
-./Core/Src/gkl_commands.o \
 ./Core/Src/gkl_link.o \
-./Core/Src/gkl_parsing.o \
 ./Core/Src/keyboard.o \
 ./Core/Src/main.o \
 ./Core/Src/pump_mgr.o \
-./Core/Src/pump_mgr_transactions.o \
-./Core/Src/pump_proto_azt.o \
 ./Core/Src/pump_proto_gkl.o \
-./Core/Src/pump_proto_sanki.o \
 ./Core/Src/settings.o \
 ./Core/Src/ssd1309.o \
 ./Core/Src/stm32h7xx_hal_msp.o \
@@ -47,22 +36,16 @@ OBJS += \
 ./Core/Src/syscalls.o \
 ./Core/Src/sysmem.o \
 ./Core/Src/system_stm32h7xx.o \
-./Core/Src/ui.o \
-./Core/Src/ui_transactions.o 
+./Core/Src/ui.o 
 
 C_DEPS += \
 ./Core/Src/app.d \
 ./Core/Src/cdc_logger.d \
-./Core/Src/gkl_commands.d \
 ./Core/Src/gkl_link.d \
-./Core/Src/gkl_parsing.d \
 ./Core/Src/keyboard.d \
 ./Core/Src/main.d \
 ./Core/Src/pump_mgr.d \
-./Core/Src/pump_mgr_transactions.d \
-./Core/Src/pump_proto_azt.d \
 ./Core/Src/pump_proto_gkl.d \
-./Core/Src/pump_proto_sanki.d \
 ./Core/Src/settings.d \
 ./Core/Src/ssd1309.d \
 ./Core/Src/stm32h7xx_hal_msp.d \
@@ -70,8 +53,7 @@ C_DEPS += \
 ./Core/Src/syscalls.d \
 ./Core/Src/sysmem.d \
 ./Core/Src/system_stm32h7xx.d \
-./Core/Src/ui.d \
-./Core/Src/ui_transactions.d 
+./Core/Src/ui.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -81,7 +63,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/app.cyclo ./Core/Src/app.d ./Core/Src/app.o ./Core/Src/app.su ./Core/Src/cdc_logger.cyclo ./Core/Src/cdc_logger.d ./Core/Src/cdc_logger.o ./Core/Src/cdc_logger.su ./Core/Src/gkl_commands.cyclo ./Core/Src/gkl_commands.d ./Core/Src/gkl_commands.o ./Core/Src/gkl_commands.su ./Core/Src/gkl_link.cyclo ./Core/Src/gkl_link.d ./Core/Src/gkl_link.o ./Core/Src/gkl_link.su ./Core/Src/gkl_parsing.cyclo ./Core/Src/gkl_parsing.d ./Core/Src/gkl_parsing.o ./Core/Src/gkl_parsing.su ./Core/Src/keyboard.cyclo ./Core/Src/keyboard.d ./Core/Src/keyboard.o ./Core/Src/keyboard.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/pump_mgr.cyclo ./Core/Src/pump_mgr.d ./Core/Src/pump_mgr.o ./Core/Src/pump_mgr.su ./Core/Src/pump_mgr_transactions.cyclo ./Core/Src/pump_mgr_transactions.d ./Core/Src/pump_mgr_transactions.o ./Core/Src/pump_mgr_transactions.su ./Core/Src/pump_proto_azt.cyclo ./Core/Src/pump_proto_azt.d ./Core/Src/pump_proto_azt.o ./Core/Src/pump_proto_azt.su ./Core/Src/pump_proto_gkl.cyclo ./Core/Src/pump_proto_gkl.d ./Core/Src/pump_proto_gkl.o ./Core/Src/pump_proto_gkl.su ./Core/Src/pump_proto_sanki.cyclo ./Core/Src/pump_proto_sanki.d ./Core/Src/pump_proto_sanki.o ./Core/Src/pump_proto_sanki.su ./Core/Src/settings.cyclo ./Core/Src/settings.d ./Core/Src/settings.o ./Core/Src/settings.su ./Core/Src/ssd1309.cyclo ./Core/Src/ssd1309.d ./Core/Src/ssd1309.o ./Core/Src/ssd1309.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32h7xx.cyclo ./Core/Src/system_stm32h7xx.d ./Core/Src/system_stm32h7xx.o ./Core/Src/system_stm32h7xx.su ./Core/Src/ui.cyclo ./Core/Src/ui.d ./Core/Src/ui.o ./Core/Src/ui.su ./Core/Src/ui_transactions.cyclo ./Core/Src/ui_transactions.d ./Core/Src/ui_transactions.o ./Core/Src/ui_transactions.su
+	-$(RM) ./Core/Src/app.cyclo ./Core/Src/app.d ./Core/Src/app.o ./Core/Src/app.su ./Core/Src/cdc_logger.cyclo ./Core/Src/cdc_logger.d ./Core/Src/cdc_logger.o ./Core/Src/cdc_logger.su ./Core/Src/gkl_link.cyclo ./Core/Src/gkl_link.d ./Core/Src/gkl_link.o ./Core/Src/gkl_link.su ./Core/Src/keyboard.cyclo ./Core/Src/keyboard.d ./Core/Src/keyboard.o ./Core/Src/keyboard.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/pump_mgr.cyclo ./Core/Src/pump_mgr.d ./Core/Src/pump_mgr.o ./Core/Src/pump_mgr.su ./Core/Src/pump_proto_gkl.cyclo ./Core/Src/pump_proto_gkl.d ./Core/Src/pump_proto_gkl.o ./Core/Src/pump_proto_gkl.su ./Core/Src/settings.cyclo ./Core/Src/settings.d ./Core/Src/settings.o ./Core/Src/settings.su ./Core/Src/ssd1309.cyclo ./Core/Src/ssd1309.d ./Core/Src/ssd1309.o ./Core/Src/ssd1309.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32h7xx.cyclo ./Core/Src/system_stm32h7xx.d ./Core/Src/system_stm32h7xx.o ./Core/Src/system_stm32h7xx.su ./Core/Src/ui.cyclo ./Core/Src/ui.d ./Core/Src/ui.o ./Core/Src/ui.su
 
 .PHONY: clean-Core-2f-Src
 

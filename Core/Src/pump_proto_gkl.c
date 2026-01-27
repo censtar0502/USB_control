@@ -73,8 +73,8 @@ static void maybe_report_error(PumpProtoGKL *gkl)
     ev.type = PUMP_EVT_ERROR;
     ev.ctrl_addr = gkl->pending_ctrl;
     ev.slave_addr = gkl->pending_slave;
-    ev.u.err.error_code = (uint8_t)st.last_error;
-    ev.u.err.fail_count = st.consecutive_fail;
+    ev.error_code = (uint8_t)st.last_error;
+    ev.fail_count = st.consecutive_fail;
     q_push(gkl, &ev);
 }
 
@@ -95,27 +95,34 @@ static const char* gkl_err_str(GKL_Result e)
     }
 }
 
-static void gkl_append_token(char *out, size_t outsz, size_t *pos, const char *t)
-{
-    if (out == NULL || outsz == 0u || pos == NULL || t == NULL) return;
-    while (*t)
-    {
-        if ((*pos + 1u) >= outsz) break;
-        out[*pos] = *t;
-        (*pos)++;
-        t++;
-    }
-    out[*pos] = 0;
-}
-
 static void gkl_append_byte_token(char *out, size_t outsz, size_t *pos, uint8_t b)
 {
     switch (b)
     {
-        case 0x02: gkl_append_token(out, outsz, pos, "<STX>"); return;
-        case 0x00: gkl_append_token(out, outsz, pos, "<NUL>"); return;
-        case 0x01: gkl_append_token(out, outsz, pos, "<SOH>"); return;
-        case 0x03: gkl_append_token(out, outsz, pos, "<ETX>"); return;
+        case 0x02:
+            if ((*pos + 5u) < outsz)
+            {
+                out[*pos++] = '<'; out[*pos++] = 'S'; out[*pos++] = 'T'; out[*pos++] = 'X'; out[*pos++] = '>';
+            }
+            return;
+        case 0x00:
+            if ((*pos + 5u) < outsz)
+            {
+                out[*pos++] = '<'; out[*pos++] = 'N'; out[*pos++] = 'U'; out[*pos++] = 'L'; out[*pos++] = '>';
+            }
+            return;
+        case 0x01:
+            if ((*pos + 5u) < outsz)
+            {
+                out[*pos++] = '<'; out[*pos++] = 'S'; out[*pos++] = 'O'; out[*pos++] = 'H'; out[*pos++] = '>';
+            }
+            return;
+        case 0x03:
+            if ((*pos + 5u) < outsz)
+            {
+                out[*pos++] = '<'; out[*pos++] = 'E'; out[*pos++] = 'T'; out[*pos++] = 'X'; out[*pos++] = '>';
+            }
+            return;
         default: break;
     }
 
@@ -133,25 +140,15 @@ static void gkl_append_byte_token(char *out, size_t outsz, size_t *pos, uint8_t 
     /* Non-printable -> hex token */
     char tmp[8];
     (void)snprintf(tmp, sizeof(tmp), "<%02X>", (unsigned)b);
-    gkl_append_token(out, outsz, pos, tmp);
-}
-
-static void gkl_format_hex_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
-{
-    if (out == NULL || outsz == 0u) return;
-    out[0] = 0;
-    if (bytes == NULL || len == 0u) return;
-
-    size_t pos = 0u;
-    for (uint8_t i = 0u; i < len; i++)
+    size_t len = strlen(tmp);
+    if ((*pos + len) < outsz)
     {
-        if ((pos + 4u) >= outsz) break;
-        pos += (size_t)snprintf(&out[pos], outsz - pos, "%02X ", (unsigned)bytes[i]);
+        memcpy(&out[*pos], tmp, len);
+        *pos += len;
     }
-    out[outsz - 1u] = 0;
 }
 
-static void gkl_format_frame_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
+static void gkl_format_frame_compact(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
 {
     if (out == NULL || outsz == 0u) return;
     out[0] = 0;
@@ -170,6 +167,20 @@ static void gkl_log_line(PumpProtoGKL *gkl, const char *line)
 {
     if (line == NULL) return;
 
+#if (PUMP_GKL_LOG_TARGET > 0)
+    /* Filter logs based on tag */
+    if (gkl && gkl->tag[0] != 0)
+    {
+        if (PUMP_GKL_LOG_TARGET == 1 && strcmp(gkl->tag, "TRK1") != 0) return;
+        if (PUMP_GKL_LOG_TARGET == 2 && strcmp(gkl->tag, "TRK2") != 0) return;
+    }
+#endif
+
+    /* Skip verbose logging if compact mode is enabled */
+#if (PUMP_GKL_COMPACT_LOG == 1)
+    /* Just push the line without tag */
+    CDC_LOG_Push(line);
+#else
     if (gkl && gkl->tag[0] != 0)
     {
         char buf[320];
@@ -180,6 +191,7 @@ static void gkl_log_line(PumpProtoGKL *gkl, const char *line)
     {
         CDC_LOG_Push(line);
     }
+#endif
 }
 
 /* ===================== PumpProto vtable implementation ===================== */
@@ -194,17 +206,22 @@ static void gkl_task(void *ctx)
         uint32_t uerr = 0u;
         if (GKL_GetAndClearUartError(&gkl->link, &uerr))
         {
+#if (PUMP_GKL_COMPACT_LOG == 0)
             char l[80];
             (void)snprintf(l, sizeof(l), "UART_ERR=0x%08lX\r\n", (unsigned long)uerr);
             gkl_log_line(gkl, l);
+#endif
         }
 
         if (gkl->link.raw_rx_overflow)
         {
             gkl->link.raw_rx_overflow = 0u;
+#if (PUMP_GKL_COMPACT_LOG == 0)
             gkl_log_line(gkl, "RAW_RX overflow\r\n");
+#endif
         }
 
+#if (PUMP_GKL_COMPACT_LOG == 0)
         uint8_t tmp[48];
         uint16_t n;
         while ((n = GKL_RawRxDrain(&gkl->link, tmp, (uint16_t)sizeof(tmp))) != 0u)
@@ -219,6 +236,7 @@ static void gkl_task(void *ctx)
             pos += (size_t)snprintf(&line[pos], sizeof(line) - pos, "\r\n");
             gkl_log_line(gkl, line);
         }
+#endif
     }
 
     GKL_Task(&gkl->link);
@@ -228,6 +246,29 @@ static void gkl_task(void *ctx)
         GKL_Frame fr;
         if (GKL_GetResponse(&gkl->link, &fr))
         {
+#if (PUMP_GKL_COMPACT_LOG == 1)
+            /* Compact format: <STX><NUL><SOH>SR (like reference log) */
+            uint8_t raw[GKL_MAX_FRAME_LEN];
+            uint8_t raw_len = 0u;
+            raw[0] = GKL_STX;
+            raw[1] = fr.ctrl;
+            raw[2] = fr.slave;
+            raw[3] = (uint8_t)fr.cmd;
+            for (uint8_t i = 0u; i < fr.data_len; i++)
+            {
+                raw[4u + i] = fr.data[i];
+            }
+            raw_len = (uint8_t)(5u + fr.data_len);
+            uint8_t c = 0u;
+            for (uint8_t i = 1u; i < (uint8_t)(raw_len - 1u); i++) c ^= raw[i];
+            raw[raw_len - 1u] = c;
+
+            char line[64];
+            gkl_format_frame_compact(raw, raw_len, line, sizeof(line));
+            strcat(line, "\r\n");
+            gkl_log_line(gkl, line);
+#else
+            /* Verbose format */
 #if (PUMP_GKL_TRACE_FRAMES)
             uint8_t raw[GKL_MAX_FRAME_LEN];
             uint8_t raw_len = 0u;
@@ -252,11 +293,14 @@ static void gkl_task(void *ctx)
             (void)snprintf(l, sizeof(l), "RX %s | HEX: %s\r\n", fstr, hstr);
             gkl_log_line(gkl, l);
 #endif
+#endif
 
             if (gkl->no_connect_latched)
             {
                 gkl->no_connect_latched = 0u;
+#if (PUMP_GKL_COMPACT_LOG == 0)
                 gkl_log_line(gkl, "LINK OK\r\n");
+#endif
             }
 
             if (fr.cmd == 'S' && fr.data_len >= 2u)
@@ -272,8 +316,8 @@ static void gkl_task(void *ctx)
                 ev.type = PUMP_EVT_STATUS;
                 ev.ctrl_addr = fr.ctrl;
                 ev.slave_addr = fr.slave;
-                ev.u.st.status = st;
-                ev.u.st.nozzle = noz;
+                ev.status = st;
+                ev.nozzle = noz;
                 q_push(gkl, &ev);
             }
         }
@@ -291,6 +335,7 @@ static void gkl_task(void *ctx)
             if ((st.consecutive_fail >= (uint8_t)PUMP_GKL_NO_CONNECT_THRESHOLD) && (gkl->no_connect_latched == 0u))
             {
                 gkl->no_connect_latched = 1u;
+#if (PUMP_GKL_COMPACT_LOG == 0)
                 char l[128];
                 (void)snprintf(l, sizeof(l),
                                "No Connect!! fail=%u err=%s rx=%u len=%u last=0x%02X tot=%lu/%lu\r\n",
@@ -302,6 +347,7 @@ static void gkl_task(void *ctx)
                                (unsigned long)st.rx_total_bytes,
                                (unsigned long)st.rx_total_frames);
                 gkl_log_line(gkl, l);
+#endif
             }
             gkl->pending = 0u;
         }
@@ -324,6 +370,18 @@ static PumpProtoResult gkl_send_poll_status(void *ctx, uint8_t ctrl_addr, uint8_
     if (r == GKL_ERR_BUSY) return PUMP_PROTO_BUSY;
     if (r != GKL_OK) return PUMP_PROTO_ERR;
 
+#if (PUMP_GKL_COMPACT_LOG == 1)
+    /* Compact format for TX frames */
+    uint8_t raw[GKL_MAX_FRAME_LEN];
+    uint8_t raw_len = 0u;
+    if (GKL_BuildFrame(ctrl_addr, slave_addr, 'S', NULL, 0u, raw, &raw_len) == GKL_OK)
+    {
+        char line[64];
+        gkl_format_frame_compact(raw, raw_len, line, sizeof(line));
+        strcat(line, "\r\n");
+        gkl_log_line(gkl, line);
+    }
+#else
 #if (PUMP_GKL_TRACE_FRAMES)
     uint8_t raw[GKL_MAX_FRAME_LEN];
     uint8_t raw_len = 0u;
@@ -337,6 +395,7 @@ static PumpProtoResult gkl_send_poll_status(void *ctx, uint8_t ctrl_addr, uint8_
         (void)snprintf(l, sizeof(l), "TX %s | HEX: %s\r\n", fstr, hstr);
         gkl_log_line(gkl, l);
     }
+#endif
 #endif
 
     gkl->pending = 1u;

@@ -24,6 +24,15 @@ void APP_Task(void);
 
 #ifdef __cplusplus
 }
+// Выбрать какой ТРК логировать
+#define PUMP_GKL_LOG_TARGET 1  // Только TRK1
+
+
+// Использовать компактный формат логов (как в эталонном логе)
+#define PUMP_GKL_COMPACT_LOG 1  // Включить компактный формат
+
+// Отключить verbose логирование
+#define PUMP_GKL_TRACE_FRAMES 0
 #endif
 
 #endif /* APP_H */

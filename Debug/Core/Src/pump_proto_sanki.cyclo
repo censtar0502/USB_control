@@ -1,5 +1,0 @@
-../Core/Src/pump_proto_sanki.c:4:13:sanki_task	1
-../Core/Src/pump_proto_sanki.c:5:13:sanki_is_idle	1
-../Core/Src/pump_proto_sanki.c:6:24:sanki_stub	1
-../Core/Src/pump_proto_sanki.c:7:13:sanki_pop_event	1
-../Core/Src/pump_proto_sanki.c:25:6:PumpProtoSanki_Init	2

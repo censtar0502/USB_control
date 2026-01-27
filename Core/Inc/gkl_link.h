@@ -51,8 +51,6 @@ extern "C" {
 typedef enum
 {
     GKL_OK = 0,
-    GKL_BUSY,              /* Added for transaction API */
-    GKL_ERR,               /* Added for transaction API */
     GKL_ERR_BUSY,
     GKL_ERR_PARAM,
     GKL_ERR_TIMEOUT,

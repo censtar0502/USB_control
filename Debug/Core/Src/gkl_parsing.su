@@ -1,2 +1,0 @@
-../Core/Src/gkl_parsing.c:21:9:GKL_GetResponseDataLen	16	static
-../Core/Src/gkl_parsing.c:46:6:GKL_ParseResponse	88	static

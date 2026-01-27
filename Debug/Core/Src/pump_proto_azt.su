@@ -1,5 +1,0 @@
-../Core/Src/pump_proto_azt.c:4:13:azt_task	16	static
-../Core/Src/pump_proto_azt.c:5:13:azt_is_idle	16	static
-../Core/Src/pump_proto_azt.c:6:24:azt_stub	4	static
-../Core/Src/pump_proto_azt.c:7:13:azt_pop_event	16	static
-../Core/Src/pump_proto_azt.c:25:6:PumpProtoAZT_Init	16	static

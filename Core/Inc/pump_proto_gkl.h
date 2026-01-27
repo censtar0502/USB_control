@@ -30,7 +30,17 @@ extern "C" {
 /* Raw TX/RX frame trace into USB CDC log.
    WARNING: enabling this increases log traffic. */
 #ifndef PUMP_GKL_TRACE_FRAMES
-#define PUMP_GKL_TRACE_FRAMES   (1u)
+#define PUMP_GKL_TRACE_FRAMES   (0u)  /* Отключим verbose логирование по умолчанию */
+#endif
+
+/* Select which TRK to log (0=both, 1=TRK1 only, 2=TRK2 only) */
+#ifndef PUMP_GKL_LOG_TARGET
+#define PUMP_GKL_LOG_TARGET   0  /* Default: log both */
+#endif
+
+/* Enable/disable compact log format (like reference log) */
+#ifndef PUMP_GKL_COMPACT_LOG
+#define PUMP_GKL_COMPACT_LOG   1  /* Default: use compact format */
 #endif
 
 typedef struct

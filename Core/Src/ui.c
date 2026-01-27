@@ -8,7 +8,6 @@
 /* USER CODE END Header */
 
 #include "ui.h"
-#include "ui_transactions.h"
 #include "ssd1309.h"
 #include "cdc_logger.h"
 #include <stdio.h>
@@ -431,13 +430,6 @@ void UI_Task(UI_Context *ui, char key)
                 ui_render_home(ui);
                 return;
             }
-            else if (key == KEY_TIM)
-            {
-                /* Start transaction - go to SELECT_MODE */
-                ui->screen = UI_SCREEN_SELECT_MODE;
-                ui->dispense_mode = DISPENSE_MODE_VOLUME; /* Default */
-                return;
-            }
         }
         else if (ui->screen == UI_SCREEN_DIAG)
         {
@@ -607,43 +599,7 @@ void UI_Task(UI_Context *ui, char key)
                 return;
             }
         }
-        /* Transaction screens key handling */
-        else if (ui->screen == UI_SCREEN_SELECT_MODE)
-        {
-            if (UI_Trans_HandleSelectMode(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_PRESET_VOLUME)
-        {
-            if (UI_Trans_HandlePresetVolume(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_PRESET_MONEY)
-        {
-            if (UI_Trans_HandlePresetMoney(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_ARMED)
-        {
-            if (UI_Trans_HandleArmed(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_FUELLING)
-        {
-            if (UI_Trans_HandleFuelling(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_PAUSED)
-        {
-            if (UI_Trans_HandlePaused(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_COMPLETED)
-        {
-            if (UI_Trans_HandleCompleted(ui, key)) return;
-        }
-        else if (ui->screen == UI_SCREEN_TOTALIZER)
-        {
-            if (UI_Trans_HandleTotalizer(ui, key)) return;
-        }
     }
-    
-    /* Background task for transactions */
-    UI_Trans_Task(ui);
 
     /* --------- Periodic render --------- */
     if ((now - ui->last_render_ms) >= UI_RENDER_PERIOD_MS)
@@ -661,38 +617,6 @@ void UI_Task(UI_Context *ui, char key)
         else if (ui->screen == UI_SCREEN_MENU)
         {
             /* keep menu visible (save state changes may be shown later) */
-        }
-        else if (ui->screen == UI_SCREEN_SELECT_MODE)
-        {
-            UI_Trans_RenderSelectMode(ui);
-        }
-        else if (ui->screen == UI_SCREEN_PRESET_VOLUME)
-        {
-            UI_Trans_RenderPresetVolume(ui);
-        }
-        else if (ui->screen == UI_SCREEN_PRESET_MONEY)
-        {
-            UI_Trans_RenderPresetMoney(ui);
-        }
-        else if (ui->screen == UI_SCREEN_ARMED)
-        {
-            UI_Trans_RenderArmed(ui);
-        }
-        else if (ui->screen == UI_SCREEN_FUELLING)
-        {
-            UI_Trans_RenderFuelling(ui);
-        }
-        else if (ui->screen == UI_SCREEN_PAUSED)
-        {
-            UI_Trans_RenderPaused(ui);
-        }
-        else if (ui->screen == UI_SCREEN_COMPLETED)
-        {
-            UI_Trans_RenderCompleted(ui);
-        }
-        else if (ui->screen == UI_SCREEN_TOTALIZER)
-        {
-            UI_Trans_RenderTotalizer(ui);
         }
         else
         {
