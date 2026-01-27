@@ -5,6 +5,8 @@
 "./Core/Src/main.o"
 "./Core/Src/pump_mgr.o"
 "./Core/Src/pump_proto_gkl.o"
+"./Core/Src/pump_response_parser.o"
+"./Core/Src/pump_transactions.o"
 "./Core/Src/settings.o"
 "./Core/Src/ssd1309.o"
 "./Core/Src/stm32h7xx_hal_msp.o"

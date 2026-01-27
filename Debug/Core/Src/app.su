@@ -1,0 +1,4 @@
+../Core/Src/app.c:9:6:APP_Init	104	static
+../Core/Src/app.c:71:6:APP_Task	24	static
+../Core/Src/app.c:89:6:APP_PushEvent	24	static
+../Core/Src/app.c:101:6:APP_PopEvent	16	static

@@ -80,7 +80,7 @@ static void maybe_report_error(PumpProtoGKL *gkl)
 
 /* ===================== Logging helpers (USB CDC) ===================== */
 
-static const char* gkl_err_str(GKL_Result e)
+/*static const char* gkl_err_str(GKL_Result e)
 {
     switch (e)
     {
@@ -93,7 +93,7 @@ static const char* gkl_err_str(GKL_Result e)
         case GKL_ERR_FORMAT: return "FORMAT";
         default: return "ERR";
     }
-}
+}*/
 
 static void gkl_append_token(char *out, size_t outsz, size_t *pos, const char *t)
 {
@@ -136,7 +136,7 @@ static void gkl_append_byte_token(char *out, size_t outsz, size_t *pos, uint8_t 
     gkl_append_token(out, outsz, pos, tmp);
 }
 
-static void gkl_format_hex_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
+/*static void gkl_format_hex_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
 {
     if (out == NULL || outsz == 0u) return;
     out[0] = 0;
@@ -149,9 +149,9 @@ static void gkl_format_hex_bytes(const uint8_t *bytes, uint8_t len, char *out, s
         pos += (size_t)snprintf(&out[pos], outsz - pos, "%02X ", (unsigned)bytes[i]);
     }
     out[outsz - 1u] = 0;
-}
+}*/
 
-static void gkl_format_frame_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
+/*static void gkl_format_frame_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
 {
     if (out == NULL || outsz == 0u) return;
     out[0] = 0;
@@ -164,7 +164,7 @@ static void gkl_format_frame_bytes(const uint8_t *bytes, uint8_t len, char *out,
         if ((pos + 1u) >= outsz) break;
     }
     out[outsz - 1u] = 0;
-}
+}*/
 
 static void gkl_format_frame_compact(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
 {
