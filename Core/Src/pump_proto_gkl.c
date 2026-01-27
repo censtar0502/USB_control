@@ -95,34 +95,27 @@ static const char* gkl_err_str(GKL_Result e)
     }
 }
 
+static void gkl_append_token(char *out, size_t outsz, size_t *pos, const char *t)
+{
+    if (out == NULL || outsz == 0u || pos == NULL || t == NULL) return;
+    while (*t)
+    {
+        if ((*pos + 1u) >= outsz) break;
+        out[*pos] = *t;
+        (*pos)++;
+        t++;
+    }
+    out[*pos] = 0;
+}
+
 static void gkl_append_byte_token(char *out, size_t outsz, size_t *pos, uint8_t b)
 {
     switch (b)
     {
-        case 0x02:
-            if ((*pos + 5u) < outsz)
-            {
-                out[*pos++] = '<'; out[*pos++] = 'S'; out[*pos++] = 'T'; out[*pos++] = 'X'; out[*pos++] = '>';
-            }
-            return;
-        case 0x00:
-            if ((*pos + 5u) < outsz)
-            {
-                out[*pos++] = '<'; out[*pos++] = 'N'; out[*pos++] = 'U'; out[*pos++] = 'L'; out[*pos++] = '>';
-            }
-            return;
-        case 0x01:
-            if ((*pos + 5u) < outsz)
-            {
-                out[*pos++] = '<'; out[*pos++] = 'S'; out[*pos++] = 'O'; out[*pos++] = 'H'; out[*pos++] = '>';
-            }
-            return;
-        case 0x03:
-            if ((*pos + 5u) < outsz)
-            {
-                out[*pos++] = '<'; out[*pos++] = 'E'; out[*pos++] = 'T'; out[*pos++] = 'X'; out[*pos++] = '>';
-            }
-            return;
+        case 0x02: gkl_append_token(out, outsz, pos, "<STX>"); return;
+        case 0x00: gkl_append_token(out, outsz, pos, "<NUL>"); return;
+        case 0x01: gkl_append_token(out, outsz, pos, "<SOH>"); return;
+        case 0x03: gkl_append_token(out, outsz, pos, "<ETX>"); return;
         default: break;
     }
 
@@ -140,12 +133,37 @@ static void gkl_append_byte_token(char *out, size_t outsz, size_t *pos, uint8_t 
     /* Non-printable -> hex token */
     char tmp[8];
     (void)snprintf(tmp, sizeof(tmp), "<%02X>", (unsigned)b);
-    size_t len = strlen(tmp);
-    if ((*pos + len) < outsz)
+    gkl_append_token(out, outsz, pos, tmp);
+}
+
+static void gkl_format_hex_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
+{
+    if (out == NULL || outsz == 0u) return;
+    out[0] = 0;
+    if (bytes == NULL || len == 0u) return;
+
+    size_t pos = 0u;
+    for (uint8_t i = 0u; i < len; i++)
     {
-        memcpy(&out[*pos], tmp, len);
-        *pos += len;
+        if ((pos + 4u) >= outsz) break;
+        pos += (size_t)snprintf(&out[pos], outsz - pos, "%02X ", (unsigned)bytes[i]);
     }
+    out[outsz - 1u] = 0;
+}
+
+static void gkl_format_frame_bytes(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
+{
+    if (out == NULL || outsz == 0u) return;
+    out[0] = 0;
+    if (bytes == NULL || len == 0u) return;
+
+    size_t pos = 0u;
+    for (uint8_t i = 0u; i < len; i++)
+    {
+        gkl_append_byte_token(out, outsz, &pos, bytes[i]);
+        if ((pos + 1u) >= outsz) break;
+    }
+    out[outsz - 1u] = 0;
 }
 
 static void gkl_format_frame_compact(const uint8_t *bytes, uint8_t len, char *out, size_t outsz)
@@ -176,7 +194,6 @@ static void gkl_log_line(PumpProtoGKL *gkl, const char *line)
     }
 #endif
 
-    /* Skip verbose logging if compact mode is enabled */
 #if (PUMP_GKL_COMPACT_LOG == 1)
     /* Just push the line without tag */
     CDC_LOG_Push(line);

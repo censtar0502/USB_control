@@ -35,7 +35,7 @@ extern "C" {
 
 /* Select which TRK to log (0=both, 1=TRK1 only, 2=TRK2 only) */
 #ifndef PUMP_GKL_LOG_TARGET
-#define PUMP_GKL_LOG_TARGET   0  /* Default: log both */
+#define PUMP_GKL_LOG_TARGET   1  /* Default: log both */
 #endif
 
 /* Enable/disable compact log format (like reference log) */
