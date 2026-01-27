@@ -1,4 +1,5 @@
-Core/Src/ui.o: ../Core/Src/ui.c ../Core/Inc/ui.h ../Core/Inc/pump_mgr.h \
+Core/Src/ui_transactions.o: ../Core/Src/ui_transactions.c \
+ ../Core/Inc/ui_transactions.h ../Core/Inc/ui.h ../Core/Inc/pump_mgr.h \
  ../Core/Inc/pump_proto.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
@@ -37,8 +38,9 @@ Core/Src/ui.o: ../Core/Src/ui.c ../Core/Inc/ui.h ../Core/Inc/pump_mgr.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h \
- ../Core/Inc/settings.h ../Core/Inc/ui_transactions.h ../Core/Inc/ui.h \
- ../Core/Inc/ssd1309.h ../Core/Inc/main.h ../Core/Inc/cdc_logger.h
+ ../Core/Inc/settings.h ../Core/Inc/pump_mgr_transactions.h \
+ ../Core/Inc/ssd1309.h ../Core/Inc/main.h
+../Core/Inc/ui_transactions.h:
 ../Core/Inc/ui.h:
 ../Core/Inc/pump_mgr.h:
 ../Core/Inc/pump_proto.h:
@@ -80,8 +82,6 @@ Core/Src/ui.o: ../Core/Src/ui.c ../Core/Inc/ui.h ../Core/Inc/pump_mgr.h \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h:
 ../Core/Inc/settings.h:
-../Core/Inc/ui_transactions.h:
-../Core/Inc/ui.h:
+../Core/Inc/pump_mgr_transactions.h:
 ../Core/Inc/ssd1309.h:
 ../Core/Inc/main.h:
-../Core/Inc/cdc_logger.h:

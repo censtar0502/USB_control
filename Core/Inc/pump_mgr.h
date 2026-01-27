@@ -42,6 +42,24 @@ typedef struct
     uint8_t nozzle;         /* selected nozzle */
     uint32_t last_status_ms;
 
+    /* Transaction state */
+    uint32_t preset_volume_dL;      /* Preset volume in dL */
+    uint32_t preset_money;          /* Preset money */
+    uint8_t preset_nozzle;          /* Preset nozzle */
+    
+    /* Realtime data */
+    uint32_t last_rt_volume_dL;     /* Last realtime volume */
+    uint32_t last_rt_money;         /* Last realtime money */
+    uint32_t last_rt_update_ms;     /* When updated */
+    
+    /* Totalizer */
+    uint32_t totalizer[8];          /* Up to 8 totalizers */
+    
+    /* Last completed transaction */
+    uint32_t last_trx_volume_dL;
+    uint32_t last_trx_money;
+    uint16_t last_trx_price;
+
     /* Cached errors */
     uint8_t last_error;
     uint8_t fail_count;

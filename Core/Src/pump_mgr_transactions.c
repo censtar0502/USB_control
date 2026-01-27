@@ -24,9 +24,9 @@
  */
 PumpProtoResult PumpMgr_PresetVolume(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzle, uint32_t volume_dL)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     /* Store preset parameters */
@@ -48,9 +48,9 @@ PumpProtoResult PumpMgr_PresetVolume(PumpMgr *mgr, uint8_t pump_id, uint8_t nozz
  */
 PumpProtoResult PumpMgr_PresetMoney(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzle, uint32_t money)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     /* Store preset parameters */
@@ -74,9 +74,9 @@ PumpProtoResult PumpMgr_PresetMoney(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzl
  */
 PumpProtoResult PumpMgr_Stop(PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_Stop(dev->proto, dev->ctrl_addr, dev->slave_addr);
@@ -90,9 +90,9 @@ PumpProtoResult PumpMgr_Stop(PumpMgr *mgr, uint8_t pump_id)
  */
 PumpProtoResult PumpMgr_Resume(PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_Resume(dev->proto, dev->ctrl_addr, dev->slave_addr);
@@ -106,9 +106,9 @@ PumpProtoResult PumpMgr_Resume(PumpMgr *mgr, uint8_t pump_id)
  */
 PumpProtoResult PumpMgr_End(PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_End(dev->proto, dev->ctrl_addr, dev->slave_addr);
@@ -127,9 +127,9 @@ PumpProtoResult PumpMgr_End(PumpMgr *mgr, uint8_t pump_id)
  */
 PumpProtoResult PumpMgr_PollRealtimeVolume(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzle)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_PollRealtimeVolume(dev->proto, dev->ctrl_addr, dev->slave_addr, nozzle);
@@ -144,9 +144,9 @@ PumpProtoResult PumpMgr_PollRealtimeVolume(PumpMgr *mgr, uint8_t pump_id, uint8_
  */
 PumpProtoResult PumpMgr_PollRealtimeMoney(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzle)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_PollRealtimeMoney(dev->proto, dev->ctrl_addr, dev->slave_addr, nozzle);
@@ -165,9 +165,9 @@ PumpProtoResult PumpMgr_PollRealtimeMoney(PumpMgr *mgr, uint8_t pump_id, uint8_t
  */
 PumpProtoResult PumpMgr_ReadTotalizer(PumpMgr *mgr, uint8_t pump_id, uint8_t index)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_ReadTotalizer(dev->proto, dev->ctrl_addr, dev->slave_addr, index);
@@ -181,9 +181,9 @@ PumpProtoResult PumpMgr_ReadTotalizer(PumpMgr *mgr, uint8_t pump_id, uint8_t ind
  */
 PumpProtoResult PumpMgr_ReadTransaction(PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return PUMP_PROTO_ERR;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return PUMP_PROTO_ERR;
     
-    PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    PumpDevice *dev = &mgr->dev[pump_id - 1u];
     if (dev->proto == NULL) return PUMP_PROTO_ERR;
     
     return PumpProto_ReadTransaction(dev->proto, dev->ctrl_addr, dev->slave_addr);
@@ -201,8 +201,8 @@ PumpProtoResult PumpMgr_ReadTransaction(PumpMgr *mgr, uint8_t pump_id)
  */
 uint32_t PumpMgr_GetRealtimeVolume(const PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return 0;
-    return mgr->devs[pump_id - 1u].last_rt_volume_dL;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return 0;
+    return mgr->dev[pump_id - 1u].last_rt_volume_dL;
 }
 
 /**
@@ -213,8 +213,8 @@ uint32_t PumpMgr_GetRealtimeVolume(const PumpMgr *mgr, uint8_t pump_id)
  */
 uint32_t PumpMgr_GetRealtimeMoney(const PumpMgr *mgr, uint8_t pump_id)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return 0;
-    return mgr->devs[pump_id - 1u].last_rt_money;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return 0;
+    return mgr->dev[pump_id - 1u].last_rt_money;
 }
 
 /**
@@ -226,8 +226,8 @@ uint32_t PumpMgr_GetRealtimeMoney(const PumpMgr *mgr, uint8_t pump_id)
  */
 uint32_t PumpMgr_GetTotalizer(const PumpMgr *mgr, uint8_t pump_id, uint8_t index)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES || index >= 8) return 0;
-    return mgr->devs[pump_id - 1u].totalizer[index];
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES || index >= 8) return 0;
+    return mgr->dev[pump_id - 1u].totalizer[index];
 }
 
 /**
@@ -241,9 +241,9 @@ uint32_t PumpMgr_GetTotalizer(const PumpMgr *mgr, uint8_t pump_id, uint8_t index
 void PumpMgr_GetLastTransaction(const PumpMgr *mgr, uint8_t pump_id,
                                 uint32_t *volume_dL, uint32_t *money, uint16_t *price)
 {
-    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_DEVICES) return;
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MAX_DEVICES) return;
     
-    const PumpDevice *dev = &mgr->devs[pump_id - 1u];
+    const PumpDevice *dev = &mgr->dev[pump_id - 1u];
     
     if (volume_dL) *volume_dL = dev->last_trx_volume_dL;
     if (money) *money = dev->last_trx_money;

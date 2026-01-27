@@ -73,8 +73,8 @@ static void maybe_report_error(PumpProtoGKL *gkl)
     ev.type = PUMP_EVT_ERROR;
     ev.ctrl_addr = gkl->pending_ctrl;
     ev.slave_addr = gkl->pending_slave;
-    ev.error_code = (uint8_t)st.last_error;
-    ev.fail_count = st.consecutive_fail;
+    ev.u.err.error_code = (uint8_t)st.last_error;
+    ev.u.err.fail_count = st.consecutive_fail;
     q_push(gkl, &ev);
 }
 
@@ -272,8 +272,8 @@ static void gkl_task(void *ctx)
                 ev.type = PUMP_EVT_STATUS;
                 ev.ctrl_addr = fr.ctrl;
                 ev.slave_addr = fr.slave;
-                ev.status = st;
-                ev.nozzle = noz;
+                ev.u.st.status = st;
+                ev.u.st.nozzle = noz;
                 q_push(gkl, &ev);
             }
         }

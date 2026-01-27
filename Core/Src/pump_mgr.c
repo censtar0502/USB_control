@@ -165,16 +165,16 @@ static void pumpmgr_handle_event(PumpMgr *m, const PumpEvent *ev)
         {
             if (ev->type == PUMP_EVT_STATUS)
             {
-                d->status = ev->status;
-                d->nozzle = ev->nozzle;
+                d->status = ev->u.st.status;
+                d->nozzle = ev->u.st.nozzle;
                 d->last_status_ms = HAL_GetTick();
                 d->last_error = 0u;
                 d->fail_count = 0u;
             }
             else if (ev->type == PUMP_EVT_ERROR)
             {
-                d->last_error = ev->error_code;
-                d->fail_count = ev->fail_count;
+                d->last_error = ev->u.err.error_code;
+                d->fail_count = ev->u.err.fail_count;
             }
         }
     }

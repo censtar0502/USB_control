@@ -1,0 +1,2 @@
+../Core/Src/gkl_parsing.c:21:9:GKL_GetResponseDataLen	8
+../Core/Src/gkl_parsing.c:46:6:GKL_ParseResponse	16

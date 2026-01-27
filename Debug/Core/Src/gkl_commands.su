@@ -1,0 +1,9 @@
+../Core/Src/gkl_commands.c:31:12:GKL_SendPresetVolume	56	static
+../Core/Src/gkl_commands.c:59:12:GKL_SendPresetMoney	56	static
+../Core/Src/gkl_commands.c:83:12:GKL_SendStop	32	static
+../Core/Src/gkl_commands.c:100:12:GKL_SendResume	32	static
+../Core/Src/gkl_commands.c:117:12:GKL_SendEnd	32	static
+../Core/Src/gkl_commands.c:136:12:GKL_SendPollVolume	40	static
+../Core/Src/gkl_commands.c:159:12:GKL_SendPollMoney	40	static
+../Core/Src/gkl_commands.c:183:12:GKL_SendReadTotalizer	40	static
+../Core/Src/gkl_commands.c:205:12:GKL_SendReadTransaction	32	static
