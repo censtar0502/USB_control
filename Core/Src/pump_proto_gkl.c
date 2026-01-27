@@ -337,6 +337,34 @@ static void gkl_task(void *ctx)
                 ev.nozzle = noz;
                 q_push(gkl, &ev);
             }
+            else if (fr.cmd == 'C' && fr.data_len >= 10u)
+            {
+                uint8_t nozzle = 0;
+                uint32_t totalizer = 0;
+
+                if (fr.data[0] >= '1' && fr.data[0] <= '6')
+                {
+                    nozzle = (uint8_t)(fr.data[0] - '0');
+                }
+
+                for (uint8_t i = 2; i < 11 && i < fr.data_len; i++)
+                {
+                    if (fr.data[i] >= '0' && fr.data[i] <= '9')
+                    {
+                        totalizer = totalizer * 10 + (fr.data[i] - '0');
+                    }
+                }
+
+                PumpEvent ev;
+                memset(&ev, 0, sizeof(ev));
+                ev.type = PUMP_EVT_TOTALIZER;
+                ev.ctrl_addr = fr.ctrl;
+                ev.slave_addr = fr.slave;
+                ev.nozzle_idx = nozzle;
+                ev.totalizer = totalizer;
+
+                q_push(gkl, &ev);
+            }
         }
         gkl->pending = 0u;
         return;
@@ -388,7 +416,6 @@ static PumpProtoResult gkl_send_poll_status(void *ctx, uint8_t ctrl_addr, uint8_
     if (r != GKL_OK) return PUMP_PROTO_ERR;
 
 #if (PUMP_GKL_COMPACT_LOG == 1)
-    /* Compact format for TX frames */
     uint8_t raw[GKL_MAX_FRAME_LEN];
     uint8_t raw_len = 0u;
     if (GKL_BuildFrame(ctrl_addr, slave_addr, 'S', NULL, 0u, raw, &raw_len) == GKL_OK)
@@ -425,6 +452,54 @@ static PumpProtoResult gkl_send_poll_status(void *ctx, uint8_t ctrl_addr, uint8_
     return PUMP_PROTO_OK;
 }
 
+static PumpProtoResult gkl_request_totalizer(void *ctx, uint8_t ctrl_addr, uint8_t slave_addr, uint8_t nozzle)
+{
+    PumpProtoGKL *gkl = (PumpProtoGKL *)ctx;
+    if (gkl == NULL) return PUMP_PROTO_ERR;
+
+    if (nozzle < 1 || nozzle > 6) return PUMP_PROTO_ERR;
+
+    uint8_t data[1];
+    data[0] = (uint8_t)('0' + nozzle);
+
+    GKL_Result r = GKL_Send(&gkl->link, ctrl_addr, slave_addr, 'C', data, 1u, 'C');
+    if (r == GKL_ERR_BUSY) return PUMP_PROTO_BUSY;
+    if (r != GKL_OK) return PUMP_PROTO_ERR;
+
+#if (PUMP_GKL_COMPACT_LOG == 1)
+    uint8_t raw[GKL_MAX_FRAME_LEN];
+    uint8_t raw_len = 0u;
+    if (GKL_BuildFrame(ctrl_addr, slave_addr, 'C', data, 1u, raw, &raw_len) == GKL_OK)
+    {
+        char line[64];
+        gkl_format_frame_compact(raw, raw_len, line, sizeof(line));
+        strcat(line, "\r\n");
+        gkl_log_line(gkl, line);
+    }
+#else
+#if (PUMP_GKL_TRACE_FRAMES)
+    uint8_t raw[GKL_MAX_FRAME_LEN];
+    uint8_t raw_len = 0u;
+    if (GKL_BuildFrame(ctrl_addr, slave_addr, 'C', data, 1u, raw, &raw_len) == GKL_OK)
+    {
+        char fstr[240];
+        gkl_format_frame_bytes(raw, raw_len, fstr, sizeof(fstr));
+        char l[300];
+        char hstr[240];
+        gkl_format_hex_bytes(raw, raw_len, hstr, sizeof(hstr));
+        (void)snprintf(l, sizeof(l), "TX %s | HEX: %s\r\n", fstr, hstr);
+        gkl_log_line(gkl, l);
+    }
+#endif
+#endif
+
+    gkl->pending = 1u;
+    gkl->pending_ctrl = ctrl_addr;
+    gkl->pending_slave = slave_addr;
+
+    return PUMP_PROTO_OK;
+}
+
 static bool gkl_pop_event(void *ctx, PumpEvent *out)
 {
     PumpProtoGKL *gkl = (PumpProtoGKL*)ctx;
@@ -432,10 +507,11 @@ static bool gkl_pop_event(void *ctx, PumpEvent *out)
 }
 
 static const PumpProtoVTable s_vt = {
-    .task             = gkl_task,
-    .is_idle          = gkl_is_idle,
-    .send_poll_status = gkl_send_poll_status,
-    .pop_event        = gkl_pop_event
+    .task               = gkl_task,
+    .is_idle            = gkl_is_idle,
+    .send_poll_status   = gkl_send_poll_status,
+    .request_totalizer  = gkl_request_totalizer,
+    .pop_event          = gkl_pop_event
 };
 
 /* ===================== Public API ===================== */

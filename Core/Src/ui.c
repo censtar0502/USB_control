@@ -10,56 +10,34 @@
 #include "ui.h"
 #include "ssd1309.h"
 #include "cdc_logger.h"
+#include "stm32h7xx_hal.h"
 #include <stdio.h>
 #include <string.h>
 
-/*
-  Raw keypad scan codes (fixed in keyboard.c by physical wiring):
-  {
-    {'H','G','F','A'},
-    {'3','2','1','B'},
-    {'6','5','4','C'},
-    {'9','8','7','D'},
-    {'K','0','.','E'}
-  }
-
-  Due to mirrored keypad mounting/wiring, the physical legends map like this:
-    TOT  -> 'A'
-    ESC  -> 'F'
-    SET  -> 'G'   (also '<')
-    INQ  -> 'H'   (also '>')
-    TIM  -> 'B'
-    SEL  -> 'C'
-    PRI  -> 'D'
-    RES  -> 'E'
-    OK   -> 'K'
-    Digits and '.' are the same.
-
-  UI assignments for TRK-only stage:
-    SET: open menu
-    ESC: back
-    SEL: select TRK (toggle 1/2)
-    PRI: quick edit price for active TRK
-    INQ: force immediate poll (both TRKs)
-    RES: retry (clear fail counter + force poll active TRK)
-    OK : confirm in menus/edits
-*/
-
-/* Physical/function keys (raw scan codes) */
-#define KEY_TOT   ('A')
-#define KEY_ESC   ('F')
-#define KEY_SET   ('G')
-#define KEY_INQ   ('H')
-#define KEY_TIM   ('B')
-#define KEY_SEL   ('C')
-#define KEY_PRI   ('D')
-#define KEY_RES   ('E')
-#define KEY_OK    ('K')
+/* Physical/function keys */
+#define KEY_TOT   ('A')  /* Totalizer all TRKs */
+#define KEY_TIM   ('B')  /* Select TRK1 */
+#define KEY_SEL   ('C')  /* Select TRK2 */
+#define KEY_PRI   ('D')  /* Start transaction (P/L/F) */
+#define KEY_RES   ('E')  /* Reset / Pause / End */
+#define KEY_ESC   ('F')  /* Back / Cancel */
+#define KEY_SET   ('G')  /* Menu / Navigate UP */
+#define KEY_INQ   ('H')  /* Navigate DOWN */
+#define KEY_OK    ('K')  /* Confirm / Save / Continue */
 
 #define UI_RENDER_PERIOD_MS   (100u)
 
-/* UI-only disconnect threshold (must match protocol policy, but UI stays protocol-agnostic) */
-#define UI_NO_CONNECT_THRESHOLD   (10u)
+/* Helper functions */
+static void ui_clear_screen(void)
+{
+    SSD1309_Fill(0);
+}
+
+static void ui_draw_line(uint8_t row, const char *text)
+{
+    SSD1309_SetCursor(0, (uint8_t)(row * 8u));
+    SSD1309_WriteString(text, 1);
+}
 
 static void ui_toast(UI_Context *ui, const char *text, uint32_t ms)
 {
@@ -69,302 +47,415 @@ static void ui_toast(UI_Context *ui, const char *text, uint32_t ms)
     ui->toast_until_ms = HAL_GetTick() + ms;
 }
 
-static void ui_clear_screen(void)
+/* Format volume in dL as XXX.XX L */
+static void format_volume(uint32_t volume_dL, char *buf, size_t len)
 {
-    SSD1309_Fill(0);
+    uint32_t liters = volume_dL / 10;
+    uint32_t frac = volume_dL % 10;
+    snprintf(buf, len, "%03lu.%02lu", (unsigned long)liters, (unsigned long)frac);
 }
 
-static void ui_draw_line(uint8_t row, const char *text)
-{
-    /* 8px font assumed by SSD1309_WriteString(..., 1) */
-    SSD1309_SetCursor(0, (uint8_t)(row * 8u));
-    SSD1309_WriteString(text, 1);
-}
-
-static const char* ui_save_state_str(const Settings *s, char *buf, size_t buflen)
-{
-    if (s == NULL || buf == NULL || buflen < 10u) return "";
-
-    SettingsSaveState st = Settings_GetSaveState(s);
-    if (st == SETTINGS_SAVE_BUSY)
-    {
-        snprintf(buf, buflen, "EEP: SAVING");
-    }
-    else if (st == SETTINGS_SAVE_OK)
-    {
-        snprintf(buf, buflen, "EEP: OK");
-    }
-    else if (st == SETTINGS_SAVE_ERROR)
-    {
-        snprintf(buf, buflen, "EEP: ERR%u", (unsigned)Settings_GetSaveError(s));
-    }
-    else
-    {
-        snprintf(buf, buflen, "EEP: IDLE");
-    }
-    return buf;
-}
+/* ============================================================================
+ * HOME SCREEN - Simplified display
+ * ========================================================================= */
 
 static void ui_render_home(UI_Context *ui)
 {
-    char line[32];
-    char sbuf[16];
-
-    const PumpDevice *d1 = PumpMgr_GetConst(ui->mgr, 1u);
-    const PumpDevice *d2 = PumpMgr_GetConst(ui->mgr, 2u);
+    if (ui == NULL) return;
 
     ui_clear_screen();
 
-    /* Line0: short help */
-    ui_draw_line(0, "HOME SET=MENU SEL=TRK");
+    char line[17];  /* 16 chars + null for 128px width */
+    uint8_t row = 0;
 
-    if (d1)
+    /* Render each TRK */
+    for (uint8_t i = 0; i < 2; i++)
     {
-        snprintf(line, sizeof(line), "%cTRK1 A%02u P%04lu",
-                 (ui->active_pump_id == 1u) ? '>' : ' ',
-                 (unsigned)d1->slave_addr,
-                 (unsigned long)d1->price);
-        ui_draw_line(1, line);
-        if (d1->fail_count >= (uint8_t)UI_NO_CONNECT_THRESHOLD)
-        {
-            snprintf(line, sizeof(line), " No Connect!! F%u", (unsigned)d1->fail_count);
+        uint8_t trk_id = i + 1;
+        const PumpDevice *dev = PumpMgr_GetConst(ui->mgr, trk_id);
+        if (!dev) continue;
+
+        /* Status symbols */
+        char select = (ui->active_pump_id == trk_id) ? '>' : ' ';
+        char pause = ' ';
+        char active = ' ';
+
+        TrkDisplayState state = ui->trk[i].state;
+
+        if (state == TRK_STATE_NOZZLE_UP) {
+            /* Blinking !* */
+            active = ui->blink_state ? '!' : ' ';
+            pause = '*';
+        } else if (state == TRK_STATE_PAUSED) {
+            pause = 'P';
+            active = '*';
+        } else if (state == TRK_STATE_FUELLING || state == TRK_STATE_ARMED) {
+            active = '*';
         }
+
+        /* TRK line */
+        if (state != TRK_STATE_IDLE) {
+            /* With transaction */
+            snprintf(line, sizeof(line), "%c%c%cTRK%u: P%04u",
+                     select, pause, active, trk_id, (unsigned)dev->price);
+            ui_draw_line(row++, line);
+
+            /* Volume line */
+            char vol_str[12];
+            format_volume(ui->trk[i].rt_volume_dL, vol_str, sizeof(vol_str));
+            snprintf(line, sizeof(line), "  L: %s", vol_str);
+            ui_draw_line(row++, line);
+
+            /* Money line */
+            snprintf(line, sizeof(line), "  P: %06lu", (unsigned long)ui->trk[i].rt_money);
+            ui_draw_line(row++, line);
+        } else {
+            /* Idle - just TRK name */
+            snprintf(line, sizeof(line), "%cTRK%u", select, trk_id);
+            ui_draw_line(row++, line);
+        }
+    }
+
+    SSD1309_UpdateScreen();
+}
+
+/* ============================================================================
+ * SELECT MODE SCREEN
+ * ========================================================================= */
+
+static void ui_render_select_mode(UI_Context *ui)
+{
+    if (ui == NULL) return;
+
+    ui_clear_screen();
+
+    uint8_t idx = ui->active_pump_id - 1;
+    DispenseMode mode = ui->trk[idx].mode;
+
+    char line[17];
+    snprintf(line, sizeof(line), "TRK%u: MODE", ui->active_pump_id);
+    ui_draw_line(0, line);
+    ui_draw_line(1, "");
+
+    /* Options */
+    ui_draw_line(2, (mode == DISPENSE_MODE_VOLUME) ? ">L: LITERS" : " L: LITERS");
+    ui_draw_line(3, (mode == DISPENSE_MODE_MONEY)  ? ">P: MONEY"  : " P: MONEY");
+    ui_draw_line(4, (mode == DISPENSE_MODE_FULL)   ? ">F: FULL"   : " F: FULL");
+
+    ui_draw_line(6, "SEL:next");
+    ui_draw_line(7, "OK:ok ESC:back");
+
+    SSD1309_UpdateScreen();
+}
+
+static bool ui_handle_select_mode(UI_Context *ui, char key)
+{
+    if (ui == NULL) return false;
+
+    uint8_t idx = ui->active_pump_id - 1;
+
+    if (key == KEY_SEL || key == KEY_PRI) {
+        /* Cycle through modes */
+        if (ui->trk[idx].mode == DISPENSE_MODE_VOLUME)
+            ui->trk[idx].mode = DISPENSE_MODE_MONEY;
+        else if (ui->trk[idx].mode == DISPENSE_MODE_MONEY)
+            ui->trk[idx].mode = DISPENSE_MODE_FULL;
         else
-        {
-            snprintf(line, sizeof(line), " S%u N%u F%u", (unsigned)d1->status, (unsigned)d1->nozzle, (unsigned)d1->fail_count);
+            ui->trk[idx].mode = DISPENSE_MODE_VOLUME;
+        return true;
+    }
+    else if (key == KEY_OK) {
+        /* Confirm */
+        if (ui->trk[idx].mode == DISPENSE_MODE_VOLUME) {
+            ui->screen = UI_SCREEN_PRESET_VOLUME;
+            ui->edit_len = 0;
+            memset(ui->edit_buf, 0, sizeof(ui->edit_buf));
+        } else if (ui->trk[idx].mode == DISPENSE_MODE_MONEY) {
+            ui->screen = UI_SCREEN_PRESET_MONEY;
+            ui->edit_len = 0;
+            memset(ui->edit_buf, 0, sizeof(ui->edit_buf));
+        } else {
+            /* Full tank - start immediately */
+            const PumpDevice *dev = PumpMgr_GetConst(ui->mgr, ui->active_pump_id);
+            if (dev && dev->price > 0) {
+                ui->trk[idx].preset_value = (999999UL * 10UL) / dev->price;
+                ui->trk[idx].preset_nozzle = 1;
+                ui->trk[idx].state = TRK_STATE_ARMED;
+
+                /* Send preset command - TODO: use protocol */
+                ui->screen = UI_SCREEN_HOME;
+            }
         }
-        ui_draw_line(2, line);
+        return true;
     }
-    else
-    {
-        ui_draw_line(1, "TRK1: --");
-        ui_draw_line(2, "");
-    }
-
-    if (d2)
-    {
-        snprintf(line, sizeof(line), "%cTRK2 A%02u P%04lu",
-                 (ui->active_pump_id == 2u) ? '>' : ' ',
-                 (unsigned)d2->slave_addr,
-                 (unsigned long)d2->price);
-        ui_draw_line(3, line);
-        if (d2->fail_count >= (uint8_t)UI_NO_CONNECT_THRESHOLD)
-        {
-            snprintf(line, sizeof(line), " No Connect!! F%u", (unsigned)d2->fail_count);
-        }
-        else
-        {
-            snprintf(line, sizeof(line), " S%u N%u F%u", (unsigned)d2->status, (unsigned)d2->nozzle, (unsigned)d2->fail_count);
-        }
-        ui_draw_line(4, line);
-    }
-    else
-    {
-        ui_draw_line(3, "TRK2: --");
-        ui_draw_line(4, "");
+    else if (key == KEY_ESC) {
+        ui->screen = UI_SCREEN_HOME;
+        ui->trk[idx].mode = DISPENSE_MODE_IDLE;
+        return true;
     }
 
-    /* Bottom lines */
-    ui_draw_line(5, "PRI=PRICE INQ=POLL");
-    ui_draw_line(6, ui_save_state_str(ui->settings, sbuf, sizeof(sbuf)));
-
-    if (ui->toast_until_ms != 0u && (int32_t)(HAL_GetTick() - ui->toast_until_ms) < 0)
-    {
-        ui_draw_line(7, ui->toast_line);
-    }
-    else
-    {
-        ui_draw_line(7, "");
-    }
-
-    SSD1309_UpdateScreen();
+    return false;
 }
 
-static void ui_render_diag(UI_Context *ui)
+/* ============================================================================
+ * PRESET VOLUME SCREEN
+ * ========================================================================= */
+
+static void ui_render_preset_volume(UI_Context *ui)
 {
-    char line[32];
-
-    const PumpDevice *d1 = PumpMgr_GetConst(ui->mgr, 1u);
-    const PumpDevice *d2 = PumpMgr_GetConst(ui->mgr, 2u);
-
-    ui_clear_screen();
-    ui_draw_line(0, "DIAG INQ=POLL RES=RETRY");
-
-    if (d1)
-    {
-        snprintf(line, sizeof(line), "%cTRK1 A%02u", (ui->active_pump_id == 1u) ? '>' : ' ', (unsigned)d1->slave_addr);
-        ui_draw_line(1, line);
-        snprintf(line, sizeof(line), " S%u N%u F%u E%u",
-                 (unsigned)d1->status, (unsigned)d1->nozzle,
-                 (unsigned)d1->fail_count, (unsigned)d1->last_error);
-        ui_draw_line(2, line);
-    }
-    else
-    {
-        ui_draw_line(1, "TRK1: --");
-        ui_draw_line(2, "");
-    }
-
-    if (d2)
-    {
-        snprintf(line, sizeof(line), "%cTRK2 A%02u", (ui->active_pump_id == 2u) ? '>' : ' ', (unsigned)d2->slave_addr);
-        ui_draw_line(3, line);
-        snprintf(line, sizeof(line), " S%u N%u F%u E%u",
-                 (unsigned)d2->status, (unsigned)d2->nozzle,
-                 (unsigned)d2->fail_count, (unsigned)d2->last_error);
-        ui_draw_line(4, line);
-    }
-    else
-    {
-        ui_draw_line(3, "TRK2: --");
-        ui_draw_line(4, "");
-    }
-
-    ui_draw_line(6, "SEL=TRK ESC=HOME");
-
-    if (ui->toast_until_ms != 0u && (int32_t)(HAL_GetTick() - ui->toast_until_ms) < 0)
-    {
-        ui_draw_line(7, ui->toast_line);
-    }
-    else
-    {
-        ui_draw_line(7, "");
-    }
-
-    SSD1309_UpdateScreen();
-}
-
-static const char *ui_menu_item(uint8_t idx)
-{
-    switch (idx)
-    {
-        case 0: return "TRK1 PRICE";
-        case 1: return "TRK1 ADDR";
-        case 2: return "TRK2 PRICE";
-        case 3: return "TRK2 ADDR";
-        case 4: return "SAVE EEPROM";
-        case 5: return "EXIT";
-        default: return "";
-    }
-}
-
-static void ui_render_menu(UI_Context *ui)
-{
-    char line[32];
-
-    ui_clear_screen();
-    ui_draw_line(0, "MENU <SET >INQ OK SEL ESC");
-
-    /* 6 items, show 6 lines max (rows 1..6) */
-    for (uint8_t r = 0u; r < 6u; r++)
-    {
-        uint8_t idx = r; /* no scrolling for now */
-        const char *item = ui_menu_item(idx);
-        if (item[0] == 0) continue;
-
-        if (ui->menu_index == idx)
-        {
-            snprintf(line, sizeof(line), "> %s", item);
-        }
-        else
-        {
-            snprintf(line, sizeof(line), "  %s", item);
-        }
-        ui_draw_line((uint8_t)(r + 1u), line);
-    }
-
-    SSD1309_UpdateScreen();
-}
-
-static void ui_render_edit(UI_Context *ui, bool is_price)
-{
-    char line[32];
-    char title[24];
-
-    uint8_t trk = (uint8_t)(ui->edit_pump_index + 1u);
+    if (ui == NULL) return;
 
     ui_clear_screen();
 
-    if (is_price)
-    {
-        snprintf(title, sizeof(title), "EDIT TRK%u PRICE", (unsigned)trk);
-        ui_draw_line(0, title);
-        ui_draw_line(1, "Digits: 0-9");
-        ui_draw_line(2, "RES/. BKSP OK=OK ESC=CAN");
-        snprintf(line, sizeof(line), "VALUE: %s", ui->edit_buf);
-        ui_draw_line(4, line);
-        ui_draw_line(6, "Range: 0000..9999");
+    char line[17];
+    snprintf(line, sizeof(line), "TRK%u: VOLUME", ui->active_pump_id);
+    ui_draw_line(0, line);
+    ui_draw_line(1, "");
+
+    /* Show input */
+    char vol_str[8] = "0";
+    if (ui->edit_len > 0) {
+        strncpy(vol_str, ui->edit_buf, ui->edit_len);
+        vol_str[ui->edit_len] = '\0';
     }
-    else
-    {
-        snprintf(title, sizeof(title), "EDIT TRK%u ADDR", (unsigned)trk);
-        ui_draw_line(0, title);
-        ui_draw_line(1, "Digits: 0-9");
-        ui_draw_line(2, "RES/. BKSP OK=OK ESC=CAN");
-        snprintf(line, sizeof(line), "VALUE: %s", ui->edit_buf);
-        ui_draw_line(4, line);
-        ui_draw_line(6, "Range: 01..32");
-    }
+
+    snprintf(line, sizeof(line), "L: %s", vol_str);
+    ui_draw_line(3, line);
+
+    ui_draw_line(6, "0-9:digit");
+    ui_draw_line(7, "OK:start RES:clr");
 
     SSD1309_UpdateScreen();
 }
 
-static bool ui_is_digit(char k)
+static bool ui_handle_preset_volume(UI_Context *ui, char key)
 {
-    return (k >= '0' && k <= '9');
+    if (ui == NULL) return false;
+
+    uint8_t idx = ui->active_pump_id - 1;
+
+    if (key >= '0' && key <= '9') {
+        if (ui->edit_len < 6) {
+            ui->edit_buf[ui->edit_len++] = key;
+            ui->edit_buf[ui->edit_len] = '\0';
+        }
+        return true;
+    }
+    else if (key == KEY_RES) {
+        /* Clear input */
+        ui->edit_len = 0;
+        memset(ui->edit_buf, 0, sizeof(ui->edit_buf));
+        return true;
+    }
+    else if (key == KEY_OK) {
+        if (ui->edit_len > 0) {
+            /* Parse as liters, convert to dL */
+            uint32_t value = 0;
+            for (uint8_t i = 0; i < ui->edit_len; i++) {
+                value = value * 10 + (ui->edit_buf[i] - '0');
+            }
+
+            ui->trk[idx].preset_value = value * 10;  /* Convert to dL */
+            ui->trk[idx].preset_nozzle = 1;
+            ui->trk[idx].state = TRK_STATE_ARMED;
+            ui->trk[idx].rt_volume_dL = 0;
+            ui->trk[idx].rt_money = 0;
+
+            /* Send preset command - TODO: use protocol when available */
+            ui->screen = UI_SCREEN_HOME;
+        }
+        return true;
+    }
+    else if (key == KEY_ESC) {
+        ui->screen = UI_SCREEN_SELECT_MODE;
+        return true;
+    }
+
+    return false;
 }
 
-static uint32_t ui_parse_u32(const char *s)
+/* ============================================================================
+ * PRESET MONEY SCREEN
+ * ========================================================================= */
+
+static void ui_render_preset_money(UI_Context *ui)
 {
-    uint32_t v = 0u;
-    while (s && *s)
-    {
-        if (*s < '0' || *s > '9') break;
-        v = (v * 10u) + (uint32_t)(*s - '0');
-        s++;
+    if (ui == NULL) return;
+
+    ui_clear_screen();
+
+    char line[17];
+    snprintf(line, sizeof(line), "TRK%u: MONEY", ui->active_pump_id);
+    ui_draw_line(0, line);
+    ui_draw_line(1, "");
+
+    /* Show input */
+    char money_str[8] = "0";
+    if (ui->edit_len > 0) {
+        strncpy(money_str, ui->edit_buf, ui->edit_len);
+        money_str[ui->edit_len] = '\0';
     }
-    return v;
+
+    snprintf(line, sizeof(line), "P: %s", money_str);
+    ui_draw_line(3, line);
+
+    ui_draw_line(6, "0-9:digit");
+    ui_draw_line(7, "OK:start RES:clr");
+
+    SSD1309_UpdateScreen();
 }
 
-static void ui_edit_start(UI_Context *ui, uint8_t pump_index, bool is_price)
+static bool ui_handle_preset_money(UI_Context *ui, char key)
 {
-    ui->edit_pump_index = pump_index;
-    ui->edit_len = 0u;
-    memset(ui->edit_buf, 0, sizeof(ui->edit_buf));
+    if (ui == NULL) return false;
 
-    if (is_price)
-    {
-        uint32_t pr = PumpMgr_GetPrice(ui->mgr, (uint8_t)(pump_index + 1u));
-        if (pr > 9999u) pr = 9999u;
-        snprintf(ui->edit_buf, sizeof(ui->edit_buf), "%04lu", (unsigned long)pr);
-        ui->edit_len = (uint8_t)strlen(ui->edit_buf);
-        ui->screen = UI_SCREEN_EDIT_PRICE;
+    uint8_t idx = ui->active_pump_id - 1;
+
+    if (key >= '0' && key <= '9') {
+        if (ui->edit_len < 6) {
+            ui->edit_buf[ui->edit_len++] = key;
+            ui->edit_buf[ui->edit_len] = '\0';
+        }
+        return true;
     }
-    else
-    {
-        uint8_t addr = PumpMgr_GetSlaveAddr(ui->mgr, (uint8_t)(pump_index + 1u));
-        if (addr < 1u) addr = 1u;
-        if (addr > 32u) addr = 32u;
-        snprintf(ui->edit_buf, sizeof(ui->edit_buf), "%02u", (unsigned)addr);
-        ui->edit_len = (uint8_t)strlen(ui->edit_buf);
-        ui->screen = UI_SCREEN_EDIT_ADDR;
+    else if (key == KEY_RES) {
+        /* Clear input */
+        ui->edit_len = 0;
+        memset(ui->edit_buf, 0, sizeof(ui->edit_buf));
+        return true;
+    }
+    else if (key == KEY_OK) {
+        if (ui->edit_len > 0) {
+            /* Parse money */
+            uint32_t value = 0;
+            for (uint8_t i = 0; i < ui->edit_len; i++) {
+                value = value * 10 + (ui->edit_buf[i] - '0');
+            }
+
+            ui->trk[idx].preset_value = value;
+            ui->trk[idx].preset_nozzle = 1;
+            ui->trk[idx].state = TRK_STATE_ARMED;
+            ui->trk[idx].rt_volume_dL = 0;
+            ui->trk[idx].rt_money = 0;
+
+            /* Send preset command - TODO: use protocol when available */
+            ui->screen = UI_SCREEN_HOME;
+        }
+        return true;
+    }
+    else if (key == KEY_ESC) {
+        ui->screen = UI_SCREEN_SELECT_MODE;
+        return true;
+    }
+
+    return false;
+}
+
+/* ============================================================================
+ * TOTALIZER SCREEN
+ * ========================================================================= */
+
+static void ui_render_totalizer(UI_Context *ui)
+{
+    if (ui == NULL) return;
+
+    ui_clear_screen();
+
+    ui_draw_line(0, "TOTALIZERS");
+    ui_draw_line(1, "");
+
+    /* Show both TRKs - TODO: read from protocol when available */
+    for (uint8_t i = 0; i < 2; i++) {
+        uint8_t trk_id = i + 1;
+
+        char line[17];
+        snprintf(line, sizeof(line), "TRK%u: N/A", trk_id);
+        ui_draw_line(2 + i * 2, line);
+    }
+
+    ui_draw_line(7, "ESC:back");
+
+    SSD1309_UpdateScreen();
+}
+
+static bool ui_handle_totalizer(UI_Context *ui, char key)
+{
+    if (ui == NULL) return false;
+
+    if (key == KEY_ESC || key == KEY_OK) {
+        ui->screen = UI_SCREEN_HOME;
+        return true;
+    }
+
+    return false;
+}
+
+/* ============================================================================
+ * BACKGROUND TASK - Update states
+ * ========================================================================= */
+
+static void ui_update_states(UI_Context *ui)
+{
+    if (ui == NULL) return;
+
+    uint32_t now = HAL_GetTick();
+
+    /* Update blink */
+    if ((now - ui->blink_timer_ms) > 500) {
+        ui->blink_state = !ui->blink_state;
+        ui->blink_timer_ms = now;
+    }
+
+    /* Update each TRK state based on pump status */
+    for (uint8_t i = 0; i < 2; i++) {
+        uint8_t trk_id = i + 1;
+        const PumpDevice *dev = PumpMgr_GetConst(ui->mgr, trk_id);
+        if (!dev) continue;
+
+        /* Update state based on pump status */
+        if (ui->trk[i].state == TRK_STATE_ARMED && dev->status == 2) {
+            /* Started fuelling */
+            ui->trk[i].state = TRK_STATE_FUELLING;
+        }
+        else if (ui->trk[i].state == TRK_STATE_FUELLING && dev->status == 3) {
+            /* Completed */
+            ui->trk[i].state = TRK_STATE_NOZZLE_UP;
+        }
+
+        /* TODO: Poll realtime data when protocol functions available */
+        /* For now, use dummy data for testing */
+        if (ui->trk[i].state == TRK_STATE_FUELLING) {
+            /* Increment dummy values for visual feedback */
+            if ((now - ui->trk[i].last_poll_ms) > 500) {
+                ui->trk[i].last_poll_ms = now;
+                ui->trk[i].rt_volume_dL += 5;  /* +0.5L */
+                ui->trk[i].rt_money += dev->price / 2;  /* corresponding money */
+            }
+        }
     }
 }
+
+/* ============================================================================
+ * INIT & MAIN TASK
+ * ========================================================================= */
 
 void UI_Init(UI_Context *ui, PumpMgr *mgr, Settings *settings)
 {
     if (ui == NULL) return;
+
     memset(ui, 0, sizeof(*ui));
     ui->mgr = mgr;
     ui->settings = settings;
-    ui->last_render_ms = 0u;
     ui->screen = UI_SCREEN_HOME;
-    ui->active_pump_id = 1u;
-    ui->menu_index = 0u;
-    ui->toast_until_ms = 0u;
-    ui->toast_line[0] = 0;
+    ui->active_pump_id = 1;
+    ui->blink_state = false;
+    ui->blink_timer_ms = HAL_GetTick();
 
-    ui_render_home(ui);
+    /* Initialize TRK states */
+    for (uint8_t i = 0; i < 2; i++) {
+        ui->trk[i].state = TRK_STATE_IDLE;
+        ui->trk[i].mode = DISPENSE_MODE_VOLUME;
+    }
 }
 
 void UI_Task(UI_Context *ui, char key)
@@ -373,254 +464,89 @@ void UI_Task(UI_Context *ui, char key)
 
     uint32_t now = HAL_GetTick();
 
-    /* --------- Key handling --------- */
-    if (key != 0)
-    {
-        /* Safety clamp for active pump */
-        if (ui->active_pump_id < 1u) ui->active_pump_id = 1u;
-        if (ui->active_pump_id > 2u) ui->active_pump_id = 2u;
+    /* Update states */
+    ui_update_states(ui);
 
-        if (ui->screen == UI_SCREEN_HOME)
-        {
-            if (key == KEY_SET)
-            {
-                ui->screen = UI_SCREEN_MENU;
-                ui->menu_index = 0u;
-                ui_render_menu(ui);
-                return;
+    /* Key handling */
+    if (key != 0) {
+        if (ui->screen == UI_SCREEN_HOME) {
+            if (key == KEY_TIM) {
+                /* Select TRK1 */
+                ui->active_pump_id = 1;
+                ui_toast(ui, "TRK1 selected", 500);
             }
-            else if (key == KEY_SEL)
-            {
-                ui->active_pump_id = (ui->active_pump_id == 1u) ? 2u : 1u;
-                ui_toast(ui, (ui->active_pump_id == 1u) ? "Active TRK1" : "Active TRK2", 900u);
-                ui_render_home(ui);
-                return;
+            else if (key == KEY_SEL) {
+                /* Select TRK2 */
+                ui->active_pump_id = 2;
+                ui_toast(ui, "TRK2 selected", 500);
             }
-            else if (key == KEY_PRI)
-            {
-                ui_edit_start(ui, (uint8_t)(ui->active_pump_id - 1u), true);
-                ui_render_edit(ui, true);
-                return;
+            else if (key == KEY_PRI) {
+                /* Start transaction */
+                uint8_t idx = ui->active_pump_id - 1;
+                ui->trk[idx].mode = DISPENSE_MODE_VOLUME;  /* Default */
+                ui->screen = UI_SCREEN_SELECT_MODE;
             }
-            else if (key == KEY_TOT)
-            {
-                ui->screen = UI_SCREEN_DIAG;
-                ui_render_diag(ui);
-                return;
+            else if (key == KEY_TOT) {
+                /* Show totalizers */
+                ui->screen = UI_SCREEN_TOTALIZER;
             }
-            else if (key == KEY_INQ)
-            {
-                PumpMgr_RequestPollAllNow(ui->mgr);
-                ui_toast(ui, "Poll now (all)", 900u);
-                ui_render_home(ui);
-                return;
+            else if (key == KEY_RES) {
+                /* Handle RES based on active TRK state */
+                uint8_t idx = ui->active_pump_id - 1;
+                if (ui->trk[idx].state == TRK_STATE_FUELLING) {
+                    /* Pause */
+                    ui->trk[idx].state = TRK_STATE_PAUSED;
+                    /* TODO: Send stop command when available */
+                }
+                else if (ui->trk[idx].state == TRK_STATE_NOZZLE_UP) {
+                    /* Close transaction */
+                    ui->trk[idx].state = TRK_STATE_IDLE;
+                    ui->trk[idx].rt_volume_dL = 0;
+                    ui->trk[idx].rt_money = 0;
+                    /* TODO: Send end command when available */
+                }
             }
-            else if (key == KEY_OK)
-            {
-                PumpMgr_RequestPollNow(ui->mgr, ui->active_pump_id);
-                ui_toast(ui, (ui->active_pump_id == 1u) ? "Poll TRK1" : "Poll TRK2", 900u);
-                ui_render_home(ui);
-                return;
-            }
-            else if (key == KEY_RES)
-            {
-                PumpMgr_ClearFail(ui->mgr, ui->active_pump_id);
-                PumpMgr_RequestPollNow(ui->mgr, ui->active_pump_id);
-                ui_toast(ui, (ui->active_pump_id == 1u) ? "Retry TRK1" : "Retry TRK2", 900u);
-                ui_render_home(ui);
-                return;
-            }
-        }
-        else if (ui->screen == UI_SCREEN_DIAG)
-        {
-            if (key == KEY_ESC)
-            {
-                ui->screen = UI_SCREEN_HOME;
-                ui_render_home(ui);
-                return;
-            }
-            else if (key == KEY_SEL)
-            {
-                ui->active_pump_id = (ui->active_pump_id == 1u) ? 2u : 1u;
-                ui_render_diag(ui);
-                return;
-            }
-            else if (key == KEY_INQ)
-            {
-                PumpMgr_RequestPollAllNow(ui->mgr);
-                ui_toast(ui, "Poll now (all)", 900u);
-                ui_render_diag(ui);
-                return;
-            }
-            else if (key == KEY_OK)
-            {
-                PumpMgr_RequestPollNow(ui->mgr, ui->active_pump_id);
-                ui_toast(ui, (ui->active_pump_id == 1u) ? "Poll TRK1" : "Poll TRK2", 900u);
-                ui_render_diag(ui);
-                return;
-            }
-            else if (key == KEY_RES)
-            {
-                PumpMgr_ClearFail(ui->mgr, ui->active_pump_id);
-                PumpMgr_RequestPollNow(ui->mgr, ui->active_pump_id);
-                ui_toast(ui, (ui->active_pump_id == 1u) ? "Retry TRK1" : "Retry TRK2", 900u);
-                ui_render_diag(ui);
-                return;
-            }
-        }
-        else if (ui->screen == UI_SCREEN_MENU)
-        {
-            if (key == KEY_ESC)
-            {
-                ui->screen = UI_SCREEN_HOME;
-                ui_render_home(ui);
-                return;
-            }
-            else if (key == KEY_SET)
-            {
-                if (ui->menu_index > 0u) ui->menu_index--;
-                ui_render_menu(ui);
-                return;
-            }
-            else if (key == KEY_INQ)
-            {
-                if (ui->menu_index < 5u) ui->menu_index++;
-                ui_render_menu(ui);
-                return;
-            }
-            else if (key == KEY_OK)
-            {
-                switch (ui->menu_index)
-                {
-                    case 0: ui_edit_start(ui, 0u, true);  ui_render_edit(ui, true);  return;
-                    case 1: ui_edit_start(ui, 0u, false); ui_render_edit(ui, false); return;
-                    case 2: ui_edit_start(ui, 1u, true);  ui_render_edit(ui, true);  return;
-                    case 3: ui_edit_start(ui, 1u, false); ui_render_edit(ui, false); return;
-                    case 4:
-                    {
-                        if (ui->settings)
-                        {
-                            Settings_CaptureFromPumpMgr(ui->settings, ui->mgr);
-                            if (Settings_RequestSave(ui->settings))
-                            {
-                                ui_toast(ui, "Saving...", 1500u);
-                                ui->screen = UI_SCREEN_HOME;
-                                ui_render_home(ui);
-                            }
-                            else
-                            {
-                                ui_toast(ui, "Save busy", 1500u);
-                                ui_render_menu(ui);
-                            }
-                        }
-                        return;
-                    }
-                    case 5:
-                    default:
-                        ui->screen = UI_SCREEN_HOME;
-                        ui_render_home(ui);
-                        return;
+            else if (key == KEY_OK) {
+                /* Continue from pause */
+                uint8_t idx = ui->active_pump_id - 1;
+                if (ui->trk[idx].state == TRK_STATE_PAUSED) {
+                    ui->trk[idx].state = TRK_STATE_FUELLING;
+                    /* TODO: Send resume command when available */
                 }
             }
         }
-        else if (ui->screen == UI_SCREEN_EDIT_PRICE || ui->screen == UI_SCREEN_EDIT_ADDR)
-        {
-            bool is_price = (ui->screen == UI_SCREEN_EDIT_PRICE);
-            uint8_t max_len = is_price ? 4u : 2u;
-
-            if (key == KEY_ESC)
-            {
-                ui->screen = UI_SCREEN_MENU;
-                ui_render_menu(ui);
-                return;
-            }
-            else if (key == '.' || key == KEY_RES)
-            {
-                if (ui->edit_len > 0u)
-                {
-                    ui->edit_len--;
-                    ui->edit_buf[ui->edit_len] = 0;
-                }
-                ui_render_edit(ui, is_price);
-                return;
-            }
-            else if (key == KEY_OK)
-            {
-                uint32_t v = ui_parse_u32(ui->edit_buf);
-                uint8_t id = (uint8_t)(ui->edit_pump_index + 1u);
-
-                if (is_price)
-                {
-                    if (v > 9999u) v = 9999u;
-                    (void)PumpMgr_SetPrice(ui->mgr, id, v);
-                    if (ui->settings)
-                    {
-                        (void)Settings_SetPumpPrice(ui->settings, ui->edit_pump_index, (uint16_t)v);
-                    }
-                    ui_toast(ui, "Price updated", 1200u);
-                }
-                else
-                {
-                    if (v < 1u) v = 1u;
-                    if (v > 32u) v = 32u;
-                    (void)PumpMgr_SetSlaveAddr(ui->mgr, id, (uint8_t)v);
-                    if (ui->settings)
-                    {
-                        (void)Settings_SetPumpSlaveAddr(ui->settings, ui->edit_pump_index, (uint8_t)v);
-                    }
-                    ui_toast(ui, "Addr updated", 1200u);
-                }
-
-                if (ui->settings)
-                {
-                    if (Settings_RequestSave(ui->settings))
-                    {
-                        CDC_Log("UI: Settings save requested");
-                        ui_toast(ui, "Saved to EEPROM", 1200u);
-                    }
-                    else
-                    {
-                        CDC_Log("UI: Settings save pending");
-                    }
-                }
-
-                ui->screen = UI_SCREEN_MENU;
-                ui_render_menu(ui);
-                return;
-            }
-            else if (ui_is_digit(key))
-            {
-                if (ui->edit_len < max_len)
-                {
-                    ui->edit_buf[ui->edit_len++] = key;
-                    ui->edit_buf[ui->edit_len] = 0;
-                }
-                ui_render_edit(ui, is_price);
-                return;
-            }
+        else if (ui->screen == UI_SCREEN_SELECT_MODE) {
+            ui_handle_select_mode(ui, key);
+        }
+        else if (ui->screen == UI_SCREEN_PRESET_VOLUME) {
+            ui_handle_preset_volume(ui, key);
+        }
+        else if (ui->screen == UI_SCREEN_PRESET_MONEY) {
+            ui_handle_preset_money(ui, key);
+        }
+        else if (ui->screen == UI_SCREEN_TOTALIZER) {
+            ui_handle_totalizer(ui, key);
         }
     }
 
-    /* --------- Periodic render --------- */
-    if ((now - ui->last_render_ms) >= UI_RENDER_PERIOD_MS)
-    {
+    /* Periodic render */
+    if ((now - ui->last_render_ms) >= UI_RENDER_PERIOD_MS) {
         ui->last_render_ms = now;
 
-        if (ui->screen == UI_SCREEN_HOME)
-        {
+        if (ui->screen == UI_SCREEN_HOME) {
             ui_render_home(ui);
         }
-        else if (ui->screen == UI_SCREEN_DIAG)
-        {
-            ui_render_diag(ui);
+        else if (ui->screen == UI_SCREEN_SELECT_MODE) {
+            ui_render_select_mode(ui);
         }
-        else if (ui->screen == UI_SCREEN_MENU)
-        {
-            /* keep menu visible (save state changes may be shown later) */
+        else if (ui->screen == UI_SCREEN_PRESET_VOLUME) {
+            ui_render_preset_volume(ui);
         }
-        else
-        {
-            /* edit screens redraw only on key */
+        else if (ui->screen == UI_SCREEN_PRESET_MONEY) {
+            ui_render_preset_money(ui);
+        }
+        else if (ui->screen == UI_SCREEN_TOTALIZER) {
+            ui_render_totalizer(ui);
         }
     }
 }

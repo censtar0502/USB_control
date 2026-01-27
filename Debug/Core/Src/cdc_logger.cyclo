@@ -1,9 +1,0 @@
-../Core/Src/cdc_logger.c:23:17:ring_used	2
-../Core/Src/cdc_logger.c:29:17:ring_free	2
-../Core/Src/cdc_logger.c:37:13:dcache_clean_txpkt	4
-../Core/Src/cdc_logger.c:52:6:CDC_LOG_Init	1
-../Core/Src/cdc_logger.c:63:10:CDC_LOG_GetDroppedCount	1
-../Core/Src/cdc_logger.c:68:6:CDC_LOG_Push	6
-../Core/Src/cdc_logger.c:98:6:CDC_Log	2
-../Core/Src/cdc_logger.c:108:6:CDC_LOG_Task	7
-../Core/Src/cdc_logger.c:150:6:CDC_LOG_TxCpltCallback	1

@@ -1,3 +1,0 @@
-../Core/Src/keyboard.c:23:6:KEYBOARD_Init	2
-../Core/Src/keyboard.c:34:6:KEYBOARD_Scan_Process	10
-../Core/Src/keyboard.c:70:6:KEYBOARD_GetKey	3

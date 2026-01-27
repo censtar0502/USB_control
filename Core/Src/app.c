@@ -1,170 +1,155 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file    app.c
-  * @brief   Application top-level (UI + Pump Manager + Protocol adapters)
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-
 #include "app.h"
-
-#include "pump_mgr.h"
-#include "pump_proto_gkl.h"
-#include "ui.h"
-#include "settings.h"
-#include "keyboard.h"
 #include "cdc_logger.h"
-
-#include <stdio.h>
+#include "keyboard.h"
 #include <string.h>
+#include <stdio.h>
 
-/* ===================== Polling timing ===================== */
-/* Pause between requests per channel (ms). Default: 200ms */
-#ifndef APP_POLL_PERIOD_MS
-#define APP_POLL_PERIOD_MS   (200u)
-#endif
+/* Static application context */
+static AppContext s_app;
 
-
-/* ---- Static singletons (no dynamic allocation) ---- */
-static PumpMgr s_mgr;
-static UI_Context s_ui;
-static Settings s_settings;
-
-/* Concrete protocol implementations (one per UART/link) */
-static PumpProtoGKL s_proto1;
-static PumpProtoGKL s_proto2;
-
-/* Generic protocol handles exposed to PumpMgr/FSM (protocol-agnostic) */
-static PumpProto s_p1;
-static PumpProto s_p2;
-
-
-/* Optional: application boot banner */
-static void app_log_boot(const char *line)
-{
-    if (line == NULL) return;
-    CDC_LOG_Push(line);
+/* Event queue helpers */
+static uint8_t event_queue_next(uint8_t idx) {
+    return (idx + 1) % 8;
 }
 
-static const char *uart_name(const UART_HandleTypeDef *huart)
-{
-    if (huart == NULL) return "UART?";
-
-    /* We only need USART2/USART3 today, but keep it safe */
-#ifdef USART1
-    if (huart->Instance == USART1) return "USART1";
-#endif
-#ifdef USART2
-    if (huart->Instance == USART2) return "USART2";
-#endif
-#ifdef USART3
-    if (huart->Instance == USART3) return "USART3";
-#endif
-#ifdef UART4
-    if (huart->Instance == UART4)  return "UART4";
-#endif
-#ifdef UART5
-    if (huart->Instance == UART5)  return "UART5";
-#endif
-#ifdef USART6
-    if (huart->Instance == USART6) return "USART6";
-#endif
-#ifdef UART7
-    if (huart->Instance == UART7)  return "UART7";
-#endif
-#ifdef UART8
-    if (huart->Instance == UART8)  return "UART8";
-#endif
-
-    return "UART?";
+static bool event_queue_is_full(void) {
+    return event_queue_next(s_app.event_queue.head) == s_app.event_queue.tail;
 }
 
-void APP_Init(UART_HandleTypeDef *huart_pump1,
-              UART_HandleTypeDef *huart_pump2,
-              I2C_HandleTypeDef  *hi2c_eeprom)
+static bool event_queue_is_empty(void) {
+    return s_app.event_queue.head == s_app.event_queue.tail;
+}
+
+void APP_PushEvent(PumpEvent *ev)
 {
-    char buf[96];
+    if (ev == NULL) return;
 
-    /* Settings first (read EEPROM once at boot) */
-    Settings_Init(&s_settings, hi2c_eeprom);
-    bool loaded = Settings_Load(&s_settings);
-
-    /* Protocol adapters (GasKitLink today; can be swapped later) */
-    PumpProtoGKL_Init(&s_proto1, huart_pump1);
-    PumpProtoGKL_SetTag(&s_proto1, "TRK1");
-    PumpProtoGKL_Bind(&s_p1, &s_proto1);
-    snprintf(buf, sizeof(buf), ">>> GasKitLink Initialized on %s (non-blocking).\r\n", uart_name(huart_pump1));
-    app_log_boot(buf);
-
-    PumpProtoGKL_Init(&s_proto2, huart_pump2);
-    PumpProtoGKL_SetTag(&s_proto2, "TRK2");
-    PumpProtoGKL_Bind(&s_p2, &s_proto2);
-    snprintf(buf, sizeof(buf), ">>> GasKitLink Initialized on %s (non-blocking).\r\n", uart_name(huart_pump2));
-    app_log_boot(buf);
-
-    /* Manager (poll period is protocol-agnostic). 200ms is safe for now. */
-    PumpMgr_Init(&s_mgr, APP_POLL_PERIOD_MS);
-
-    /* Ensure at least two entries exist in settings */
-    if (s_settings.data.pump_count < 2u)
-    {
-        s_settings.data.pump_count = 2u;
-        /* Defaults already clamped inside Settings_Defaults/Load */
+    if (event_queue_is_full()) {
+        /* Drop oldest event */
+        s_app.event_queue.tail = event_queue_next(s_app.event_queue.tail);
     }
 
-    /* Create devices (IDs 1..N) */
-    (void)PumpMgr_Add(&s_mgr,
-                     1u,
-                     &s_p1,
-                     s_settings.data.pump[0].ctrl_addr,
-                     s_settings.data.pump[0].slave_addr);
+    s_app.event_queue.events[s_app.event_queue.head] = *ev;
+    s_app.event_queue.head = event_queue_next(s_app.event_queue.head);
+}
 
-    (void)PumpMgr_Add(&s_mgr,
-                     2u,
-                     &s_p2,
-                     s_settings.data.pump[1].ctrl_addr,
-                     s_settings.data.pump[1].slave_addr);
+bool APP_PopEvent(PumpEvent *ev)
+{
+    if (ev == NULL) return false;
+    if (event_queue_is_empty()) return false;
 
-    (void)PumpMgr_SetPrice(&s_mgr, 1u, (uint32_t)s_settings.data.pump[0].price);
-    (void)PumpMgr_SetPrice(&s_mgr, 2u, (uint32_t)s_settings.data.pump[1].price);
+    *ev = s_app.event_queue.events[s_app.event_queue.tail];
+    s_app.event_queue.tail = event_queue_next(s_app.event_queue.tail);
+    return true;
+}
 
-    /* UI */
-    UI_Init(&s_ui, &s_mgr, &s_settings);
+/* Callback function to handle events from PumpMgr */
+static void pump_event_handler(PumpEvent *ev)
+{
+    if (ev == NULL) return;
 
-    /* Logs */
-    app_log_boot(">>> APP: Control Panel started\r\n");
-    snprintf(buf, sizeof(buf), ">>> APP: Settings %s (seq=%lu, slot=%u)\r\n",
-             loaded ? "loaded" : "defaults",
-             (unsigned long)s_settings.seq,
-             (unsigned)s_settings.last_slot);
-    app_log_boot(buf);
+    /* Push event to application queue */
+    APP_PushEvent(ev);
 
-    snprintf(buf, sizeof(buf), ">>> APP: TRK1 addr=%02u price=%04u\r\n",
-             (unsigned)s_settings.data.pump[0].slave_addr,
-             (unsigned)s_settings.data.pump[0].price);
-    app_log_boot(buf);
+    /* Log some events for debugging */
+    if (ev->type == PUMP_EVT_TOTALIZER) {
+        CDC_Log("APP: Totalizer event");
+    }
+}
 
-    snprintf(buf, sizeof(buf), ">>> APP: TRK2 addr=%02u price=%04u\r\n",
-             (unsigned)s_settings.data.pump[1].slave_addr,
-             (unsigned)s_settings.data.pump[1].price);
-    app_log_boot(buf);
+void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2C_HandleTypeDef *hi2c)
+{
+    CDC_Log(">>> APP_Init start");
+
+    /* Initialize protocol instances */
+    PumpProtoGKL_Init(&s_app.gkl1, huart_trk1);
+    PumpProtoGKL_SetTag(&s_app.gkl1, "TRK1");
+    PumpProtoGKL_Bind(&s_app.proto1, &s_app.gkl1);
+
+    PumpProtoGKL_Init(&s_app.gkl2, huart_trk2);
+    PumpProtoGKL_SetTag(&s_app.gkl2, "TRK2");
+    PumpProtoGKL_Bind(&s_app.proto2, &s_app.gkl2);
+
+    CDC_Log(">>> GKL protocol instances ready");
+
+    /* Initialize pump manager with 1 second polling */
+    PumpMgr_Init(&s_app.mgr, 1000);
+
+    /* Add pumps (IDs 1 and 2) with default addresses - MATCH YOUR SIGNATURE */
+    if (!PumpMgr_Add(&s_app.mgr, 1, &s_app.proto1, 0, 1)) {
+        CDC_Log(">>> ERROR: Failed to add TRK1 to manager");
+    }
+    if (!PumpMgr_Add(&s_app.mgr, 2, &s_app.proto2, 0, 2)) {
+        CDC_Log(">>> ERROR: Failed to add TRK2 to manager");
+    }
+
+    /* Initialize settings (EEPROM) */
+    Settings_Init(&s_app.settings, hi2c);
+
+    /* Try to load settings from EEPROM */
+    if (Settings_Load(&s_app.settings)) {
+        CDC_Log(">>> Settings loaded from EEPROM");
+
+        /* Apply loaded settings to pump manager */
+        for (uint8_t i = 0; i < 2; i++) {
+            /* Direct access to settings data */
+            uint8_t addr = s_app.settings.data.pump[i].slave_addr;
+            uint16_t price = s_app.settings.data.pump[i].price;
+
+            PumpMgr_SetSlaveAddr(&s_app.mgr, i + 1, addr);
+            PumpMgr_SetPrice(&s_app.mgr, i + 1, price);
+
+            /* Log with manual formatting */
+            char msg[64];
+            snprintf(msg, sizeof(msg), ">>> TRK%u: addr=%u price=%u",
+                    (unsigned)(i + 1), (unsigned)addr, (unsigned)price);
+            CDC_Log(msg);
+        }
+    } else {
+        CDC_Log(">>> No valid settings in EEPROM, using defaults");
+    }
+
+    /* Initialize UI */
+    UI_Init(&s_app.ui, &s_app.mgr, &s_app.settings);
+
+    /* Initialize event queue */
+    s_app.event_queue.head = 0;
+    s_app.event_queue.tail = 0;
+
+    CDC_Log(">>> APP_Init complete");
 }
 
 void APP_Task(void)
 {
-    /* Keyboard events are queued by timer scan. Here we just consume one event. */
-    char key = KEYBOARD_GetKey();
+    char key = 0;
 
-    /* Run protocol/manager tasks (non-blocking) */
-    PumpMgr_Task(&s_mgr);
+    /* 1. Get keyboard input */
+    key = KEYBOARD_GetKey();
 
-    /* Settings async write task (non-blocking) */
-    Settings_Task(&s_settings);
+    /* 2. Process pump manager (protocol polling, etc.) */
+    PumpMgr_Task(&s_app.mgr);
 
-    /* UI */
-    UI_Task(&s_ui, key);
+    /* 3. Process events from pump manager */
+    PumpEvent ev;
 
-    /* USB CDC logger flush */
+    /* Get events from manager */
+    while (PumpMgr_PopEvent(&s_app.mgr, &ev)) {
+        pump_event_handler(&ev);
+    }
+
+    /* 4. Process application event queue */
+    while (APP_PopEvent(&ev)) {
+        if (ev.type == PUMP_EVT_TOTALIZER) {
+            /* Handle totalizer events if needed */
+        }
+    }
+
+    /* 5. Process UI */
+    UI_Task(&s_app.ui, key);
+
+    /* 6. Process settings (EEPROM saves) */
+    Settings_Task(&s_app.settings);
+
+    /* 7. Process USB CDC logging */
     CDC_LOG_Task();
 }

@@ -1,7 +1,0 @@
-../Core/Src/ssd1309.c:42:13:SSD1309_WriteCommand	16	static
-../Core/Src/ssd1309.c:49:6:SSD1309_Init	8	static
-../Core/Src/ssd1309.c:81:6:SSD1309_Fill	16	static
-../Core/Src/ssd1309.c:89:6:SSD1309_UpdateScreen	24	static,ignoring_inline_asm
-../Core/Src/ssd1309.c:114:6:SSD1309_SetCursor	16	static
-../Core/Src/ssd1309.c:119:6:SSD1309_WriteChar	24	static
-../Core/Src/ssd1309.c:141:6:SSD1309_WriteString	16	static

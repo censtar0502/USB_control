@@ -55,7 +55,7 @@ extern "C" {
 #define SETTINGS_SLOT1_ADDR              (0x0080u)
 
 /* Max pump settings stored (matches PumpMgr capacity) */
-#define SETTINGS_MAX_PUMPS               (PUMP_MAX_DEVICES)
+#define SETTINGS_MAX_PUMPS               (PUMP_MGR_MAX_PUMPS)
 
 typedef enum
 {

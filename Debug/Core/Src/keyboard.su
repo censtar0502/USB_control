@@ -1,3 +1,0 @@
-../Core/Src/keyboard.c:23:6:KEYBOARD_Init	16	static
-../Core/Src/keyboard.c:34:6:KEYBOARD_Scan_Process	16	static
-../Core/Src/keyboard.c:70:6:KEYBOARD_GetKey	16	static

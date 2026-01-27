@@ -160,7 +160,7 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
   CDC_LOG_Init();
-  HAL_Delay(1000);
+  HAL_Delay(3000);
   System_Log(">>> System Booting...\r\n");
 
   /* Аппаратный сброс дисплея с использованием новых меток из main.h */
@@ -185,6 +185,7 @@ int main(void)
   SSD1309_WriteString("H750 CONTROL", 1);
   SSD1309_SetCursor(30, 30);
   SSD1309_WriteString("STATUS: READY", 1);
+
   SSD1309_UpdateScreen();
 
   System_Log(">>> Display Initialized. Starting Timers.\r\n");

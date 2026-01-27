@@ -33,7 +33,7 @@ extern "C" {
 #define GKL_MAX_FRAME_LEN              (1u + 2u + 1u + GKL_MAX_DATA_LEN + 1u) /* 27 bytes */
 
 #define GKL_INTERBYTE_TIMEOUT_MS       (10u)   /* tif */
-#define GKL_RESP_TIMEOUT_MS            (200u)  /* ts */
+#define GKL_RESP_TIMEOUT_MS            (100u)  /* ts */
 #define GKL_RESP_DELAY_MIN_MS          (3u)   /* td (slave delays response) */
 
 /* How many UART links we can register in the global callbacks dispatcher */

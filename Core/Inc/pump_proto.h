@@ -32,7 +32,8 @@ typedef enum
 {
     PUMP_EVT_NONE = 0,
     PUMP_EVT_STATUS,
-    PUMP_EVT_ERROR
+    PUMP_EVT_ERROR,
+    PUMP_EVT_TOTALIZER  /* Новое событие - данные тоталайзера */
 } PumpEventType;
 
 typedef struct
@@ -50,6 +51,10 @@ typedef struct
     /* Error (when type == PUMP_EVT_ERROR) */
     uint8_t error_code;  /* protocol-specific numeric error */
     uint8_t fail_count;  /* consecutive failures seen by link */
+
+    /* Totalizer data (when type == PUMP_EVT_TOTALIZER) */
+    uint8_t nozzle_idx;  /* Номер форсунки 1-6 */
+    uint32_t totalizer;  /* Значение тоталайзера в сантилитрах */
 } PumpEvent;
 
 typedef struct PumpProtoVTable
@@ -58,6 +63,7 @@ typedef struct PumpProtoVTable
     bool (*is_idle)(void *ctx);
 
     PumpProtoResult (*send_poll_status)(void *ctx, uint8_t ctrl_addr, uint8_t slave_addr);
+    PumpProtoResult (*request_totalizer)(void *ctx, uint8_t ctrl_addr, uint8_t slave_addr, uint8_t nozzle);
 
     bool (*pop_event)(void *ctx, PumpEvent *out);
 } PumpProtoVTable;
@@ -83,6 +89,12 @@ static inline PumpProtoResult PumpProto_PollStatus(PumpProto *p, uint8_t ctrl, u
 {
     if (p == NULL || p->vt == NULL || p->vt->send_poll_status == NULL) return PUMP_PROTO_ERR;
     return p->vt->send_poll_status(p->ctx, ctrl, slave);
+}
+
+static inline PumpProtoResult PumpProto_RequestTotalizer(PumpProto *p, uint8_t ctrl, uint8_t slave, uint8_t nozzle)
+{
+    if (p == NULL || p->vt == NULL || p->vt->request_totalizer == NULL) return PUMP_PROTO_ERR;
+    return p->vt->request_totalizer(p->ctx, ctrl, slave, nozzle);
 }
 
 static inline bool PumpProto_PopEvent(PumpProto *p, PumpEvent *out)
