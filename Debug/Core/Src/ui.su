@@ -1,0 +1,16 @@
+../Core/Src/ui.c:17:13:ui_clear	8	static
+../Core/Src/ui.c:19:13:ui_line	16	static
+../Core/Src/ui.c:25:13:format_volume	40	static
+../Core/Src/ui.c:32:24:ui_get_fsm	16	static
+../Core/Src/ui.c:38:13:ui_render_home	104	static
+../Core/Src/ui.c:89:13:ui_handle_home	40	static
+../Core/Src/ui.c:147:13:ui_render_select_mode	48	static
+../Core/Src/ui.c:164:13:ui_handle_select_mode	32	static
+../Core/Src/ui.c:201:13:ui_render_preset_volume	56	static
+../Core/Src/ui.c:224:13:ui_handle_preset_volume	40	static
+../Core/Src/ui.c:289:13:ui_render_preset_money	56	static
+../Core/Src/ui.c:312:13:ui_handle_preset_money	32	static
+../Core/Src/ui.c:350:13:ui_render_totalizer	80	static
+../Core/Src/ui.c:371:13:ui_handle_totalizer	16	static
+../Core/Src/ui.c:381:6:UI_Init	24	static
+../Core/Src/ui.c:395:6:UI_Task	24	static

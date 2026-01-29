@@ -1,258 +1,328 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file    pump_mgr.c
+  * @brief   Protocol-agnostic pump device manager (polling, cached state)
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
 #include "pump_mgr.h"
-#include "stm32h7xx_hal.h"  /* for HAL_GetTick; change if other MCU family */
+#include "cdc_logger.h"
+#include "stm32h7xx_hal.h"
+#include <string.h>
+#include <stdio.h>
 
-/* steps */
-#define STEP_SR   0u
-#define STEP_LM   1u
-#define STEP_RS   2u
-
-static PumpMgrState prv_map_state(uint16_t code, char st)
+/*
+ * Find a pump device by its link addressing (ctrl/slave).
+ * We use it to map protocol events back to PumpDevice.
+ */
+static PumpDevice *pumpmgr_find(PumpMgr *m, uint8_t ctrl_addr, uint8_t slave_addr)
 {
-    (void)st;
-    switch (code)
+    if (m == NULL) return NULL;
+    for (uint8_t i = 0u; i < m->count; i++)
     {
-        case 10: return PUMPMGR_STATE_IDLE;       /* S10S */
-        case 31: return PUMPMGR_STATE_PAUSED;     /* S31P */
-        case 41: return PUMPMGR_STATE_WAIT;       /* S41W */
-        case 61: return PUMPMGR_STATE_RUNNING;    /* S61U */
-        case 81: return PUMPMGR_STATE_FINISHING;  /* S81[ */
-        case 90: return PUMPMGR_STATE_DONE;       /* S90[ */
-        default: return PUMPMGR_STATE_UNKNOWN;
+        PumpDevice *d = &m->pumps[i];
+        if ((d->ctrl_addr == ctrl_addr) && (d->slave_addr == slave_addr))
+        {
+            return d;
+        }
+    }
+    return NULL;
+}
+
+void PumpMgr_Init(PumpMgr *m, uint32_t poll_period_ms)
+{
+    if (m == NULL) return;
+    memset(m, 0, sizeof(*m));
+    m->poll_period_ms = poll_period_ms;
+    for (uint8_t i = 0u; i < (uint8_t)PUMP_MGR_MAX_PUMPS; i++)
+    {
+        m->next_poll_ms[i] = 0u;
     }
 }
 
-void PumpMgr_Init(PumpMgr *mgr, GKL_Link *link)
+bool PumpMgr_Add(PumpMgr *m, uint8_t id, PumpProto *proto, uint8_t ctrl_addr, uint8_t slave_addr)
 {
-    if (mgr == NULL) { return; }
+    if (m == NULL || proto == NULL) return false;
+    if (m->count >= (uint8_t)PUMP_MGR_MAX_PUMPS) return false;
 
-    mgr->link = link;
-
-    mgr->sr_period_ms = 200u;
-    mgr->lr_period_ms = 200u;
-
-    mgr->next_send_ms = HAL_GetTick();
-    mgr->step = STEP_SR;
-    mgr->waiting_resp = false;
-
-    mgr->last_status_code = 0u;
-    mgr->last_status_char = 0;
-    mgr->state = PUMPMGR_STATE_UNKNOWN;
-
-    mgr->last_nozzle = 0u;
-    mgr->last_volume_dL = 0u;
-    mgr->last_money = 0u;
-    mgr->has_volume = false;
-    mgr->has_money = false;
-}
-
-void PumpMgr_SetPeriods(PumpMgr *mgr, uint32_t sr_period_ms, uint32_t lr_period_ms)
-{
-    if (mgr == NULL) { return; }
-    if (sr_period_ms == 0u) { sr_period_ms = 200u; }
-    if (lr_period_ms == 0u) { lr_period_ms = 200u; }
-    mgr->sr_period_ms = sr_period_ms;
-    mgr->lr_period_ms = lr_period_ms;
-}
-
-/* send one request frame according to current step */
-static bool prv_send_step(PumpMgr *mgr)
-{
-    const uint8_t *data = NULL;
-    uint8_t len = 0u;
-    char cmd = 0;
-    char expected = 0;
-
-    if (mgr->link == NULL) { return false; }
-
-    if (mgr->step == STEP_SR)
+    /* Ensure unique id */
+    for (uint8_t i = 0u; i < m->count; i++)
     {
-        static const uint8_t sr_data[1] = { (uint8_t)'R' };
-        cmd = 'S';
-        expected = 'S';
-        data = sr_data;
-        len = 1u;
-    }
-    else if (mgr->step == STEP_LM)
-    {
-        static const uint8_t lm_data[1] = { (uint8_t)'M' };
-        cmd = 'L';
-        expected = 'L';
-        data = lm_data;
-        len = 1u;
-    }
-    else /* STEP_RS */
-    {
-        static const uint8_t rs_data[1] = { (uint8_t)'S' };
-        cmd = 'R';
-        expected = 'R';
-        data = rs_data;
-        len = 1u;
+        if (m->pumps[i].id == id) return false;
     }
 
-    if (GKL_IsBusy(mgr->link))
-    {
-        return false;
-    }
+    PumpDevice *d = &m->pumps[m->count];
+    memset(d, 0, sizeof(*d));
+    d->id = id;
+    d->proto = *proto;  /* Copy struct */
+    d->ctrl_addr = ctrl_addr;
+    d->slave_addr = slave_addr;
+    d->price = 0u;
+    d->status = 0u;
+    d->nozzle = 0u;
+    d->last_status_ms = 0u;
+    d->last_error = 0u;
+    d->fail_count = 0u;
 
-    if (!GKL_Send(mgr->link, cmd, data, len, expected))
-    {
-        return false;
-    }
-
-    mgr->waiting_resp = true;
+    m->next_poll_ms[m->count] = 0u;
+    m->count++;
     return true;
 }
 
-static void prv_handle_response(PumpMgr *mgr, const GKL_Frame *resp)
+PumpDevice *PumpMgr_Get(PumpMgr *m, uint8_t id)
 {
-    /* SR response */
-    if (resp->cmd == 'S')
+    if (m == NULL) return NULL;
+    for (uint8_t i = 0u; i < m->count; i++)
     {
-        uint16_t code = 0u;
-        char st = 0;
-
-        if (PumpResp_ParseStatus(resp, &code, &st))
-        {
-            mgr->last_status_code = code;
-            mgr->last_status_char = st;
-            mgr->state = prv_map_state(code, st);
-        }
-        else
-        {
-            mgr->state = PUMPMGR_STATE_ERROR;
-        }
-        return;
+        if (m->pumps[i].id == id) return &m->pumps[i];
     }
-
-    /* LM response -> volume */
-    if (resp->cmd == 'L')
-    {
-        uint8_t noz = 0u;
-        uint32_t vol_dL = 0u;
-
-        if (PumpResp_ParseRealtimeVolume(resp, &noz, &vol_dL))
-        {
-            mgr->last_nozzle = noz;
-            mgr->last_volume_dL = vol_dL;
-            mgr->has_volume = true;
-        }
-        return;
-    }
-
-    /* RS response -> money */
-    if (resp->cmd == 'R')
-    {
-        uint8_t noz = 0u;
-        uint32_t money = 0u;
-
-        if (PumpResp_ParseRealtimeMoney(resp, &noz, &money))
-        {
-            mgr->last_nozzle = noz;
-            mgr->last_money = money;
-            mgr->has_money = true;
-        }
-        return;
-    }
-
-    /* other responses ignored here (V/C/etc are handled elsewhere if needed) */
+    return NULL;
 }
 
-void PumpMgr_Task(PumpMgr *mgr)
+const PumpDevice *PumpMgr_GetConst(const PumpMgr *m, uint8_t id)
 {
-    uint32_t now;
-
-    if (mgr == NULL) { return; }
-    now = HAL_GetTick();
-
-    /* If response is ready, consume it */
-    if (mgr->waiting_resp && GKL_HasResponse(mgr->link))
+    if (m == NULL) return NULL;
+    for (uint8_t i = 0u; i < m->count; i++)
     {
-        GKL_Frame resp;
-        if (GKL_GetResponse(mgr->link, &resp))
-        {
-            prv_handle_response(mgr, &resp);
-        }
-        mgr->waiting_resp = false;
-
-        /* decide next step */
-        if (mgr->step == STEP_SR)
-        {
-            if (mgr->state == PUMPMGR_STATE_RUNNING)
-            {
-                /* IMPORTANT: this is the missing part in your log:
-                 * after S61U we must poll LM then RS like эталон */
-                mgr->step = STEP_LM;
-                mgr->next_send_ms = now; /* immediately */
-            }
-            else
-            {
-                mgr->step = STEP_SR;
-                mgr->next_send_ms = now + mgr->sr_period_ms;
-            }
-        }
-        else if (mgr->step == STEP_LM)
-        {
-            mgr->step = STEP_RS;
-            mgr->next_send_ms = now; /* immediately */
-        }
-        else /* STEP_RS */
-        {
-            mgr->step = STEP_SR;
-            /* when running, keep a stable LR cycle rate; otherwise SR rate */
-            if (mgr->state == PUMPMGR_STATE_RUNNING)
-            {
-                mgr->next_send_ms = now + mgr->lr_period_ms;
-            }
-            else
-            {
-                mgr->next_send_ms = now + mgr->sr_period_ms;
-            }
-        }
+        if (m->pumps[i].id == id) return &m->pumps[i];
     }
-
-    /* If not waiting, try to send according to schedule */
-    if (!mgr->waiting_resp)
-    {
-        if ((int32_t)(now - mgr->next_send_ms) >= 0)
-        {
-            (void)prv_send_step(mgr);
-            /* if send failed (busy), we'll retry next tick without changing next_send_ms */
-        }
-    }
+    return NULL;
 }
 
-PumpMgrState PumpMgr_GetState(const PumpMgr *mgr)
+bool PumpMgr_SetPrice(PumpMgr *m, uint8_t id, uint32_t price)
 {
-    if (mgr == NULL) { return PUMPMGR_STATE_UNKNOWN; }
-    return mgr->state;
-}
-
-uint16_t PumpMgr_GetLastStatusCode(const PumpMgr *mgr)
-{
-    if (mgr == NULL) { return 0u; }
-    return mgr->last_status_code;
-}
-
-char PumpMgr_GetLastStatusChar(const PumpMgr *mgr)
-{
-    if (mgr == NULL) { return 0; }
-    return mgr->last_status_char;
-}
-
-bool PumpMgr_GetLastVolume_dL(const PumpMgr *mgr, uint8_t *nozzle, uint32_t *volume_dL)
-{
-    if (mgr == NULL || nozzle == NULL || volume_dL == NULL) { return false; }
-    if (!mgr->has_volume) { return false; }
-    *nozzle = mgr->last_nozzle;
-    *volume_dL = mgr->last_volume_dL;
+    PumpDevice *d = PumpMgr_Get(m, id);
+    if (d == NULL) return false;
+    d->price = price;
     return true;
 }
 
-bool PumpMgr_GetLastMoney(const PumpMgr *mgr, uint8_t *nozzle, uint32_t *money)
+uint32_t PumpMgr_GetPrice(const PumpMgr *m, uint8_t id)
 {
-    if (mgr == NULL || nozzle == NULL || money == NULL) { return false; }
-    if (!mgr->has_money) { return false; }
-    *nozzle = mgr->last_nozzle;
-    *money = mgr->last_money;
+    const PumpDevice *d = PumpMgr_GetConst(m, id);
+    if (d == NULL) return 0u;
+    return d->price;
+}
+
+bool PumpMgr_SetSlaveAddr(PumpMgr *m, uint8_t id, uint8_t slave_addr)
+{
+    PumpDevice *d = PumpMgr_Get(m, id);
+    if (d == NULL) return false;
+    d->slave_addr = slave_addr;
     return true;
+}
+
+uint8_t PumpMgr_GetSlaveAddr(const PumpMgr *m, uint8_t id)
+{
+    const PumpDevice *d = PumpMgr_GetConst(m, id);
+    if (d == NULL) return 0u;
+    return d->slave_addr;
+}
+
+bool PumpMgr_SetCtrlAddr(PumpMgr *m, uint8_t id, uint8_t ctrl_addr)
+{
+    PumpDevice *d = PumpMgr_Get(m, id);
+    if (d == NULL) return false;
+    d->ctrl_addr = ctrl_addr;
+    return true;
+}
+
+uint8_t PumpMgr_GetCtrlAddr(const PumpMgr *m, uint8_t id)
+{
+    const PumpDevice *d = PumpMgr_GetConst(m, id);
+    if (d == NULL) return 0u;
+    return d->ctrl_addr;
+}
+
+void PumpMgr_ClearFail(PumpMgr *m, uint8_t id)
+{
+    if (m == NULL) return;
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        if (m->pumps[i].id == id)
+        {
+            m->pumps[i].last_error = 0u;
+            m->pumps[i].fail_count = 0u;
+            return;
+        }
+    }
+}
+
+void PumpMgr_RequestPollNow(PumpMgr *m, uint8_t id)
+{
+    if (m == NULL) return;
+    uint32_t now = HAL_GetTick();
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        if (m->pumps[i].id == id)
+        {
+            m->next_poll_ms[i] = now;
+            return;
+        }
+    }
+}
+
+void PumpMgr_RequestPollAllNow(PumpMgr *m)
+{
+    if (m == NULL) return;
+    uint32_t now = HAL_GetTick();
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        m->next_poll_ms[i] = now;
+    }
+}
+
+PumpProtoResult PumpMgr_RequestTotalizer(PumpMgr *mgr, uint8_t pump_id, uint8_t nozzle)
+{
+    if (mgr == NULL || pump_id == 0 || pump_id > PUMP_MGR_MAX_PUMPS) return PUMP_PROTO_ERR;
+
+    PumpDevice *dev = &mgr->pumps[pump_id - 1u];
+
+    /* Call request_totalizer if available */
+    if (dev->proto.vt && dev->proto.vt->request_totalizer)
+    {
+        return dev->proto.vt->request_totalizer(dev->proto.ctx, dev->ctrl_addr, dev->slave_addr, nozzle);
+    }
+
+    return PUMP_PROTO_ERR;
+}
+
+static void pumpmgr_handle_event(PumpMgr *m, const PumpEvent *ev)
+{
+    if (m == NULL || ev == NULL) return;
+
+    PumpDevice *d = pumpmgr_find(m, ev->ctrl_addr, ev->slave_addr);
+    if (d == NULL) return;
+
+    switch (ev->type)
+    {
+        case PUMP_EVT_STATUS:
+            d->status = ev->status;
+            d->nozzle = ev->nozzle;
+            d->last_status_ms = HAL_GetTick();
+
+            /* Status received -> link is alive */
+            d->last_error = 0u;
+            d->fail_count = 0u;
+            break;
+
+        case PUMP_EVT_ERROR:
+            d->last_error = ev->error_code;
+            d->fail_count = ev->fail_count;
+            break;
+
+        case PUMP_EVT_TOTALIZER:
+            d->totalizer_nozzle = ev->nozzle_idx;
+            d->totalizer_dL = ev->totalizer;
+            d->totalizer_seq++;
+            break;
+
+        case PUMP_EVT_RT_VOLUME:
+            d->nozzle = ev->rt_nozzle;
+            d->rt_volume_dL = ev->rt_volume_dL;
+            d->rt_vol_seq++;
+            break;
+
+        case PUMP_EVT_RT_MONEY:
+            d->nozzle = ev->rt_nozzle;
+            d->rt_money = ev->rt_money;
+            d->rt_money_seq++;
+            break;
+
+        case PUMP_EVT_TRX_FINAL:
+            d->trx_nozzle = ev->trx_nozzle;
+            d->trx_volume_dL = ev->trx_volume_dL;
+            d->trx_money = ev->trx_money;
+            d->trx_price = ev->trx_price;
+            d->trx_final_seq++;
+            break;
+
+        default:
+            break;
+    }
+}
+
+bool PumpMgr_PopEvent(PumpMgr *m, PumpEvent *out)
+{
+    if (m == NULL || out == NULL) return false;
+
+    /* Try each pump's protocol */
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        PumpDevice *d = &m->pumps[i];
+        if (PumpProto_PopEvent(&d->proto, out))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void PumpMgr_Task(PumpMgr *m)
+{
+    if (m == NULL) return;
+    uint32_t now = HAL_GetTick();
+
+    /* Build unique protocol list */
+    PumpProto *protos[PUMP_MGR_MAX_PUMPS];
+    uint8_t proto_count = 0u;
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        PumpProto *p = &m->pumps[i].proto;
+
+        bool seen = false;
+        for (uint8_t j = 0u; j < proto_count; j++)
+        {
+            if (protos[j] == p)
+            {
+                seen = true;
+                break;
+            }
+        }
+
+        if (!seen && proto_count < (uint8_t)PUMP_MGR_MAX_PUMPS)
+        {
+            protos[proto_count++] = p;
+        }
+    }
+
+    /* 1) Drive protocols and consume their events */
+    for (uint8_t i = 0u; i < proto_count; i++)
+    {
+        PumpProto *p = protos[i];
+        PumpProto_Task(p);
+
+        PumpEvent ev;
+        while (PumpProto_PopEvent(p, &ev))
+        {
+            pumpmgr_handle_event(m, &ev);
+        }
+    }
+
+    /* 2) Periodic polling */
+    for (uint8_t i = 0u; i < m->count; i++)
+    {
+        PumpDevice *d = &m->pumps[i];
+
+        if (now < m->next_poll_ms[i]) continue;
+
+        if (!PumpProto_IsIdle(&d->proto))
+        {
+            continue;
+        }
+
+        (void)PumpProto_PollStatus(&d->proto, d->ctrl_addr, d->slave_addr);
+
+        /* When a transaction is active, we poll SR faster to keep pause minimal */
+        uint32_t period = m->poll_period_ms;
+        if (d->status == 3u || d->status == 4u || d->status == 6u || d->status == 8u || d->status == 9u)
+        {
+            period = (uint32_t)PUMP_MGR_ACTIVE_POLL_MS;
+        }
+
+        m->next_poll_ms[i] = now + period;
+    }
 }
