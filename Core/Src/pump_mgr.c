@@ -13,24 +13,6 @@
 #include <string.h>
 #include <stdio.h>
 
-/*
- * Find a pump device by its link addressing (ctrl/slave).
- * We use it to map protocol events back to PumpDevice.
- */
-static PumpDevice *pumpmgr_find(PumpMgr *m, uint8_t ctrl_addr, uint8_t slave_addr)
-{
-    if (m == NULL) return NULL;
-    for (uint8_t i = 0u; i < m->count; i++)
-    {
-        PumpDevice *d = &m->pumps[i];
-        if ((d->ctrl_addr == ctrl_addr) && (d->slave_addr == slave_addr))
-        {
-            return d;
-        }
-    }
-    return NULL;
-}
-
 void PumpMgr_Init(PumpMgr *m, uint32_t poll_period_ms)
 {
     if (m == NULL) return;
@@ -193,54 +175,33 @@ static void pumpmgr_handle_event(PumpMgr *m, const PumpEvent *ev)
 {
     if (m == NULL || ev == NULL) return;
 
-    PumpDevice *d = pumpmgr_find(m, ev->ctrl_addr, ev->slave_addr);
-    if (d == NULL) return;
-
-    switch (ev->type)
+    /* Find matching device by address */
+    for (uint8_t i = 0u; i < m->count; i++)
     {
-        case PUMP_EVT_STATUS:
-            d->status = ev->status;
-            d->nozzle = ev->nozzle;
-            d->last_status_ms = HAL_GetTick();
-
-            /* Status received -> link is alive */
-            d->last_error = 0u;
-            d->fail_count = 0u;
-            break;
-
-        case PUMP_EVT_ERROR:
-            d->last_error = ev->error_code;
-            d->fail_count = ev->fail_count;
-            break;
-
-        case PUMP_EVT_TOTALIZER:
-            d->totalizer_nozzle = ev->nozzle_idx;
-            d->totalizer_dL = ev->totalizer;
-            d->totalizer_seq++;
-            break;
-
-        case PUMP_EVT_RT_VOLUME:
-            d->nozzle = ev->rt_nozzle;
-            d->rt_volume_dL = ev->rt_volume_dL;
-            d->rt_vol_seq++;
-            break;
-
-        case PUMP_EVT_RT_MONEY:
-            d->nozzle = ev->rt_nozzle;
-            d->rt_money = ev->rt_money;
-            d->rt_money_seq++;
-            break;
-
-        case PUMP_EVT_TRX_FINAL:
-            d->trx_nozzle = ev->trx_nozzle;
-            d->trx_volume_dL = ev->trx_volume_dL;
-            d->trx_money = ev->trx_money;
-            d->trx_price = ev->trx_price;
-            d->trx_final_seq++;
-            break;
-
-        default:
-            break;
+        PumpDevice *d = &m->pumps[i];
+        if (d->ctrl_addr == ev->ctrl_addr && d->slave_addr == ev->slave_addr)
+        {
+            if (ev->type == PUMP_EVT_STATUS)
+            {
+                /* OLD format - no union */
+                d->status = ev->status;
+                d->nozzle = ev->nozzle;
+                d->last_status_ms = HAL_GetTick();
+                d->last_error = 0u;
+                d->fail_count = 0u;
+            }
+            else if (ev->type == PUMP_EVT_ERROR)
+            {
+                /* OLD format - no union */
+                d->last_error = ev->error_code;
+                d->fail_count = ev->fail_count;
+            }
+            else if (ev->type == PUMP_EVT_TOTALIZER)
+            {
+                /* Log totalizer event */
+                CDC_Log("PumpMgr: Totalizer event");
+            }
+        }
     }
 }
 
@@ -315,14 +276,6 @@ void PumpMgr_Task(PumpMgr *m)
         }
 
         (void)PumpProto_PollStatus(&d->proto, d->ctrl_addr, d->slave_addr);
-
-        /* When a transaction is active, we poll SR faster to keep pause minimal */
-        uint32_t period = m->poll_period_ms;
-        if (d->status == 3u || d->status == 4u || d->status == 6u || d->status == 8u || d->status == 9u)
-        {
-            period = (uint32_t)PUMP_MGR_ACTIVE_POLL_MS;
-        }
-
-        m->next_poll_ms[i] = now + period;
+        m->next_poll_ms[i] = now + m->poll_period_ms;
     }
 }

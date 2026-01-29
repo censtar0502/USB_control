@@ -8,7 +8,6 @@
 /* USER CODE END Header */
 
 #include "pump_proto_gkl.h"
-#include "pump_response_parser.h"
 
 #include "cdc_logger.h"
 
@@ -196,17 +195,8 @@ static void gkl_log_line(PumpProtoGKL *gkl, const char *line)
 #endif
 
 #if (PUMP_GKL_COMPACT_LOG == 1)
-    /* Add tag prefix if present */
-    if (gkl && gkl->tag[0] != 0)
-    {
-        char tagged_line[80];
-        snprintf(tagged_line, sizeof(tagged_line), "[%s] %s", gkl->tag, line);
-        CDC_LOG_Push(tagged_line);
-    }
-    else
-    {
-        CDC_LOG_Push(line);
-    }
+    /* Just push the line without tag */
+    CDC_LOG_Push(line);
 #else
     if (gkl && gkl->tag[0] != 0)
     {
@@ -347,77 +337,33 @@ static void gkl_task(void *ctx)
                 ev.nozzle = noz;
                 q_push(gkl, &ev);
             }
-            else if (fr.cmd == 'C')
+            else if (fr.cmd == 'C' && fr.data_len >= 10u)
             {
-                uint8_t noz = 0u;
-                uint32_t tot_dL = 0u;
+                uint8_t nozzle = 0;
+                uint32_t totalizer = 0;
 
-                if (PumpResp_ParseTotalizer(&fr, &noz, &tot_dL))
+                if (fr.data[0] >= '1' && fr.data[0] <= '6')
                 {
-                    PumpEvent ev;
-                    memset(&ev, 0, sizeof(ev));
-                    ev.type = PUMP_EVT_TOTALIZER;
-                    ev.ctrl_addr = fr.ctrl;
-                    ev.slave_addr = fr.slave;
-                    ev.nozzle_idx = noz;
-                    ev.totalizer = tot_dL;
-                    q_push(gkl, &ev);
+                    nozzle = (uint8_t)(fr.data[0] - '0');
                 }
-            }
-            else if (fr.cmd == 'L')
-            {
-                uint8_t noz = 0u;
-                uint32_t vol_dL = 0u;
 
-                if (PumpResp_ParseRealtimeVolume(&fr, &noz, &vol_dL))
+                for (uint8_t i = 2; i < 11 && i < fr.data_len; i++)
                 {
-                    PumpEvent ev;
-                    memset(&ev, 0, sizeof(ev));
-                    ev.type = PUMP_EVT_RT_VOLUME;
-                    ev.ctrl_addr = fr.ctrl;
-                    ev.slave_addr = fr.slave;
-                    ev.rt_nozzle = noz;
-                    ev.rt_volume_dL = vol_dL;
-                    q_push(gkl, &ev);
+                    if (fr.data[i] >= '0' && fr.data[i] <= '9')
+                    {
+                        totalizer = totalizer * 10 + (fr.data[i] - '0');
+                    }
                 }
-            }
-            else if (fr.cmd == 'R')
-            {
-                uint8_t noz = 0u;
-                uint32_t money = 0u;
 
-                if (PumpResp_ParseRealtimeMoney(&fr, &noz, &money))
-                {
-                    PumpEvent ev;
-                    memset(&ev, 0, sizeof(ev));
-                    ev.type = PUMP_EVT_RT_MONEY;
-                    ev.ctrl_addr = fr.ctrl;
-                    ev.slave_addr = fr.slave;
-                    ev.rt_nozzle = noz;
-                    ev.rt_money = money;
-                    q_push(gkl, &ev);
-                }
-            }
-            else if (fr.cmd == 'T')
-            {
-                uint8_t noz = 0u;
-                uint32_t vol_dL = 0u;
-                uint32_t money = 0u;
-                uint16_t price = 0u;
+                PumpEvent ev;
+                memset(&ev, 0, sizeof(ev));
+                ev.type = PUMP_EVT_TOTALIZER;
+                ev.ctrl_addr = fr.ctrl;
+                ev.slave_addr = fr.slave;
+                ev.nozzle_idx = nozzle;
+                ev.totalizer = totalizer;
 
-                if (PumpResp_ParseTransaction(&fr, &noz, &vol_dL, &money, &price))
-                {
-                    PumpEvent ev;
-                    memset(&ev, 0, sizeof(ev));
-                    ev.type = PUMP_EVT_TRX_FINAL;
-                    ev.ctrl_addr = fr.ctrl;
-                    ev.slave_addr = fr.slave;
-                    ev.trx_nozzle = noz;
-                    ev.trx_volume_dL = vol_dL;
-                    ev.trx_money = money;
-                    ev.trx_price = price;
-                    q_push(gkl, &ev);
-                }
+                q_push(gkl, &ev);
             }
         }
         gkl->pending = 0u;

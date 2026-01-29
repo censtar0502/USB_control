@@ -25,7 +25,7 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
     CDC_Log(">>> GKL protocol ready");
     
     /* Init pump manager */
-    PumpMgr_Init(&s_app.mgr, 1000);
+    PumpMgr_Init(&s_app.mgr, 250);
     PumpMgr_Add(&s_app.mgr, 1, &s_app.proto1, 0, 1);
     PumpMgr_Add(&s_app.mgr, 2, &s_app.proto2, 0, 2);
     

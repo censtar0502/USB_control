@@ -18,9 +18,6 @@ extern "C" {
 
 #ifndef PUMP_MGR_MAX_PUMPS
 #define PUMP_MGR_MAX_PUMPS   (4u)
-
-/* Faster SR polling when transaction is active */
-#define PUMP_MGR_ACTIVE_POLL_MS 30u
 #endif
 
 typedef struct
@@ -37,24 +34,6 @@ typedef struct
     uint8_t      nozzle;
 
     uint32_t     last_status_ms;
-
-    /* Cached realtime values (updated by PumpProtoGKL via events) */
-    uint32_t     rt_volume_dL;     /* 0.1L units */
-    uint32_t     rt_money;         /* protocol units */
-    uint8_t      rt_vol_seq;
-    uint8_t      rt_money_seq;
-
-    /* Cached totalizer */
-    uint32_t     totalizer_dL;     /* 0.1L units */
-    uint8_t      totalizer_nozzle; /* nozzle index from C response */
-    uint8_t      totalizer_seq;
-
-    /* Cached final transaction (T response) */
-    uint32_t     trx_money;
-    uint32_t     trx_volume_dL;    /* 0.1L units */
-    uint16_t     trx_price;
-    uint8_t      trx_nozzle;
-    uint8_t      trx_final_seq;
 
     uint8_t      last_error;
     uint8_t      fail_count;

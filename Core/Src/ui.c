@@ -39,7 +39,7 @@ static void ui_render_home(UI_Context *ui)
 {
     ui_clear();
     
-    char line[32];
+    char line[17];
     uint8_t row = 0;
     
     for (uint8_t i = 0; i < 2; i++) {
@@ -106,15 +106,17 @@ static bool ui_handle_home(UI_Context *ui, char key)
         
         /* Request totalizers */
         if (ui->trk1_fsm && ui->trk1_fsm->gkl) {
+            GKL_Link *gkl = &ui->trk1_fsm->gkl->link;
             const PumpDevice *dev = PumpMgr_GetConst(ui->trk1_fsm->mgr, 1);
-            if (dev && ui->trk1_fsm->gkl->link.state == GKL_STATE_IDLE) {
-                PumpTrans_ReadTotalizer(ui->trk1_fsm->gkl, dev->ctrl_addr, dev->slave_addr, 0);
+            if (dev && gkl->state == GKL_STATE_IDLE) {
+                PumpTrans_ReadTotalizer(gkl, dev->ctrl_addr, dev->slave_addr, 0);
             }
         }
         if (ui->trk2_fsm && ui->trk2_fsm->gkl) {
+            GKL_Link *gkl = &ui->trk2_fsm->gkl->link;
             const PumpDevice *dev = PumpMgr_GetConst(ui->trk2_fsm->mgr, 2);
-            if (dev && ui->trk2_fsm->gkl->link.state == GKL_STATE_IDLE) {
-                PumpTrans_ReadTotalizer(ui->trk2_fsm->gkl, dev->ctrl_addr, dev->slave_addr, 0);
+            if (dev && gkl->state == GKL_STATE_IDLE) {
+                PumpTrans_ReadTotalizer(gkl, dev->ctrl_addr, dev->slave_addr, 0);
             }
         }
         return true;
@@ -148,7 +150,7 @@ static void ui_render_select_mode(UI_Context *ui)
 {
     ui_clear();
     
-    char line[32];
+    char line[17];
     snprintf(line, sizeof(line), "TRK%u: MODE", ui->active_pump_id);
     ui_line(0, line);
     ui_line(1, "");
@@ -202,7 +204,7 @@ static void ui_render_preset_volume(UI_Context *ui)
 {
     ui_clear();
     
-    char line[32];
+    char line[17];
     snprintf(line, sizeof(line), "TRK%u: VOLUME", ui->active_pump_id);
     ui_line(0, line);
     ui_line(1, "");
@@ -290,7 +292,7 @@ static void ui_render_preset_money(UI_Context *ui)
 {
     ui_clear();
     
-    char line[32];
+    char line[17];
     snprintf(line, sizeof(line), "TRK%u: MONEY", ui->active_pump_id);
     ui_line(0, line);
     ui_line(1, "");
@@ -358,7 +360,7 @@ static void ui_render_totalizer(UI_Context *ui)
         TransactionFSM *fsm = (i == 0) ? ui->trk1_fsm : ui->trk2_fsm;
         if (!fsm) continue;
         
-        char line[32], vol_str[12];
+        char line[17], vol_str[12];
         format_volume(fsm->totalizer_dL, vol_str, sizeof(vol_str));
         snprintf(line, sizeof(line), "TRK%u: %s", i+1, vol_str);
         ui_line(2 + i * 2, line);
