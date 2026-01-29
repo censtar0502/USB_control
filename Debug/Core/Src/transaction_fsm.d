@@ -1,6 +1,5 @@
 Core/Src/transaction_fsm.o: ../Core/Src/transaction_fsm.c \
  ../Core/Inc/transaction_fsm.h ../Core/Inc/pump_mgr.h \
- ../Core/Inc/pump_proto.h ../Core/Inc/pump_proto_gkl.h \
  ../Core/Inc/gkl_link.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
@@ -39,12 +38,11 @@ Core/Src/transaction_fsm.o: ../Core/Src/transaction_fsm.c \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h \
- ../Core/Inc/pump_transactions.h ../Core/Inc/pump_response_parser.h \
- ../Core/Inc/gkl_link.h
+ ../Core/Inc/pump_response_parser.h ../Core/Inc/pump_proto_gkl.h \
+ ../Core/Inc/pump_proto.h ../Core/Inc/pump_transactions.h \
+ ../Core/Inc/pump_response_parser.h ../Core/Inc/gkl_link.h
 ../Core/Inc/transaction_fsm.h:
 ../Core/Inc/pump_mgr.h:
-../Core/Inc/pump_proto.h:
-../Core/Inc/pump_proto_gkl.h:
 ../Core/Inc/gkl_link.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 ../Core/Inc/stm32h7xx_hal_conf.h:
@@ -83,6 +81,9 @@ Core/Src/transaction_fsm.o: ../Core/Src/transaction_fsm.c \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h:
+../Core/Inc/pump_response_parser.h:
+../Core/Inc/pump_proto_gkl.h:
+../Core/Inc/pump_proto.h:
 ../Core/Inc/pump_transactions.h:
 ../Core/Inc/pump_response_parser.h:
 ../Core/Inc/gkl_link.h:

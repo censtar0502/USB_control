@@ -38,7 +38,7 @@ Core/Src/pump_proto_gkl.o: ../Core/Src/pump_proto_gkl.c \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h \
- ../Core/Inc/cdc_logger.h
+ ../Core/Inc/pump_response_parser.h ../Core/Inc/cdc_logger.h
 ../Core/Inc/pump_proto_gkl.h:
 ../Core/Inc/pump_proto.h:
 ../Core/Inc/gkl_link.h:
@@ -79,4 +79,5 @@ Core/Src/pump_proto_gkl.o: ../Core/Src/pump_proto_gkl.c \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h:
+../Core/Inc/pump_response_parser.h:
 ../Core/Inc/cdc_logger.h:

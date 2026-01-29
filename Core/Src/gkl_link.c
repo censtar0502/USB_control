@@ -105,11 +105,34 @@ static uint8_t gkl_resp_data_len_for_cmd(char resp_cmd)
     /* Data length in Application Layer (not counting STX/addr/cmd/checksum) */
     switch (resp_cmd)
     {
-        case 'S': return 2u;  /* Status response: 2 data bytes (e.g., "10" in "S10S") */
+        /*
+         * Ответ статуса имеет 2 байта данных (две цифры), а "буква" в эталонных
+         * строках (S/P/W/U/[) фактически соответствует CRC-байту и в верхний слой
+         * не передаётся (CRC валидируется и отбрасывается).
+         * Пример (как в логе): S10S / S31P / S41W / S61U / S90[
+         */
+        case 'S': return 2u;
+
+        /*
+         * V-ответ: V1;000500;1122 (13 байт данных после 'V')
+         * CRC идёт отдельным байтом в конце кадра.
+         */
+        case 'V': return 13u;
+        case 'N': return 0u;  /* "NO" (N + CRC='O') */
+
+        /*
+         * L/R-ответы (онлайн литры/сумма): например L1q6;000009 / R1q6;000121
+         * После команды 'L'/'R' идёт 10 байт данных.
+         */
         case 'L': return 10u;
         case 'R': return 10u;
+
+        /* Финальные данные транзакции: например T1q8;005500;000500;1122 (22 байта данных) */
         case 'T': return 22u;
+
+        /* Тоталайзер: C1;000396003 (11 байт данных) */
         case 'C': return 11u;
+
         case 'Z': return 6u;
         case 'D': return 2u;
         default:  return 0xFFu; /* unknown/variable */
@@ -147,8 +170,28 @@ static void gkl_try_finalize_frame_if_complete(GKL_Link *link)
 {
     if (link == NULL) return;
 
-    /* If expected length unknown -> can't finalize here */
-    if (link->rx_expected_len == 0u) return;
+    /*
+     * If expected length is unknown, try to infer it once we have the CMD byte.
+     * This is critical for commands that don't have an immediate response
+     * (fire-and-forget), or when the application chooses not to validate CMD.
+     */
+    if (link->rx_expected_len == 0u)
+    {
+        if (link->rx_len < 4u) return; /* Need STX,CTRL,SLAVE,CMD */
+        if (link->rx_buf[0] != GKL_STX)
+        {
+            gkl_fail(link, GKL_ERR_FORMAT);
+            return;
+        }
+        uint8_t resp_data_len = gkl_resp_data_len_for_cmd((char)link->rx_buf[3]);
+        if (resp_data_len == 0xFFu)
+        {
+            /* Unknown CMD length -> wait for more bytes (or timeout) */
+            return;
+        }
+        link->rx_expected_len = (uint8_t)(1u + 2u + 1u + resp_data_len + 1u);
+    }
+
     if (link->rx_len < link->rx_expected_len) return;
 
     uint8_t len = link->rx_expected_len;
@@ -420,7 +463,16 @@ void GKL_Global_UART_TxCpltCallback(UART_HandleTypeDef *huart)
     if (link == NULL) return;
 
     link->tx_done_ms = HAL_GetTick();
-    link->state = GKL_STATE_WAIT_RESP;
+
+    /* If no response is expected for this command, go back to IDLE immediately. */
+    if (link->expected_resp_cmd == 0)
+    {
+        link->state = GKL_STATE_IDLE;
+    }
+    else
+    {
+        link->state = GKL_STATE_WAIT_RESP;
+    }
 }
 
 void GKL_Global_UART_RxCpltCallback(UART_HandleTypeDef *huart)

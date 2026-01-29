@@ -10,6 +10,11 @@ extern "C" {
 #include <stdbool.h>
 #include "gkl_link.h"
 
+/* Parse S response - Status (e.g. "S10S", "S31P", "S61U")
+ * Data part expected: 3 bytes: ['0'..'9','0'..'9', state_letter]
+ */
+bool PumpResp_ParseStatus(const GKL_Frame *resp, uint16_t *code_u16, char *state_code);
+
 /* Parse L response - Realtime volume */
 bool PumpResp_ParseRealtimeVolume(const GKL_Frame *resp, uint8_t *nozzle, uint32_t *volume_dL);
 

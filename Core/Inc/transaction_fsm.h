@@ -1,4 +1,4 @@
-/* transaction_fsm.h - Transaction State Machine */
+/* transaction_fsm.h */
 #ifndef TRANSACTION_FSM_H
 #define TRANSACTION_FSM_H
 
@@ -21,15 +21,36 @@ typedef struct {
     uint8_t pump_id;
     PumpMgr *mgr;
     PumpProtoGKL *gkl;
-    
+
     TrxState state;
+
     uint32_t preset_volume_dL;
     uint32_t preset_money;
+
+    /* Cached values for UI */
     uint32_t rt_volume_dL;
     uint32_t rt_money;
     uint32_t totalizer_dL;
+
     uint32_t last_poll_ms;
-    
+
+    /*
+     * Realtime polling state machine:
+     *  poll_step:
+     *   0 - wait for next SR update, then send LM
+     *   1 - waiting L response (volume), then send RS
+     *   2 - waiting R response (money), then finish cycle
+     */
+    uint8_t  poll_step;
+
+    uint32_t cycle_status_ms;
+    uint8_t  wait_vol_seq;
+    uint8_t  wait_money_seq;
+
+    /* 1 if TU (T request) command sent; we wait for TRX_FINAL event */
+    uint8_t  final_data_requested;
+    uint8_t  wait_trx_seq;
+
 } TransactionFSM;
 
 void TrxFSM_Init(TransactionFSM *fsm, uint8_t pump_id, PumpMgr *mgr, PumpProtoGKL *gkl);

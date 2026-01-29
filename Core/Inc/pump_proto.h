@@ -33,7 +33,10 @@ typedef enum
     PUMP_EVT_NONE = 0,
     PUMP_EVT_STATUS,
     PUMP_EVT_ERROR,
-    PUMP_EVT_TOTALIZER  /* Новое событие - данные тоталайзера */
+    PUMP_EVT_TOTALIZER,     /* Данные тоталайзера */
+    PUMP_EVT_RT_VOLUME,     /* Realtime volume (L response) */
+    PUMP_EVT_RT_MONEY,      /* Realtime money (R response) */
+    PUMP_EVT_TRX_FINAL      /* Final transaction (T response) */
 } PumpEventType;
 
 typedef struct
@@ -54,7 +57,18 @@ typedef struct
 
     /* Totalizer data (when type == PUMP_EVT_TOTALIZER) */
     uint8_t nozzle_idx;  /* Номер форсунки 1-6 */
-    uint32_t totalizer;  /* Значение тоталайзера в сантилитрах */
+    uint32_t totalizer;  /* Тоталайзер (в dL после нормализации) */
+
+    /* Realtime (when type == PUMP_EVT_RT_VOLUME / PUMP_EVT_RT_MONEY) */
+    uint8_t rt_nozzle;       /* Номер форсунки 1-6 */
+    uint32_t rt_volume_dL;   /* Realtime volume in dL (0.1L) */
+    uint32_t rt_money;       /* Realtime money (protocol units) */
+
+    /* Final transaction (when type == PUMP_EVT_TRX_FINAL) */
+    uint8_t trx_nozzle;
+    uint32_t trx_volume_dL;  /* Final volume in dL (0.1L) */
+    uint32_t trx_money;      /* Final money (protocol units) */
+    uint16_t trx_price;      /* Price (protocol units) */
 } PumpEvent;
 
 typedef struct PumpProtoVTable
