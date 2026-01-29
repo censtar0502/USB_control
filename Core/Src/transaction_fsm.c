@@ -56,6 +56,10 @@ void TrxFSM_Task(TransactionFSM *fsm)
     /* State machine transitions */
     switch (fsm->state) {
         case TRX_IDLE:
+            /* Auto-cleanup: if pump shows S90 but we're idle, send N to close */
+            if (dev->status == 9 && gkl->state == GKL_STATE_IDLE) {
+                PumpTrans_End(gkl, dev->ctrl_addr, dev->slave_addr);
+            }
             break;
             
         case TRX_PRESET_SENT:

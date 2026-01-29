@@ -193,21 +193,25 @@ int main(void) {
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
+	/* USER CODE BEGIN WHILE */
 	while (1) {
-		/* Run application (USB logging, protocol plugins, UI, managers) */
-		APP_Task();
+	    /* Run application (USB logging, protocol plugins, UI, managers) */
+	    APP_Task();
 
-		/* Heartbeat log is optional (disabled by default) */
-#if (SYS_UPTIME_LOG_ENABLE)
-    if (HAL_GetTick() - last_alive_tick >= 5000u) {
-        last_alive_tick = HAL_GetTick();
-        snprintf(msg_buf, sizeof(msg_buf), "SYS: Uptime %lu sec\r\n", (unsigned long)(last_alive_tick/1000u));
-        System_Log(msg_buf);
-    }
-#endif
-		/* USER CODE END WHILE */
+	    /* КРИТИЧЕСКИ ВАЖНО: Отправка CDC логов в USB! */
+	    CDC_LOG_Task();
 
-		/* USER CODE BEGIN 3 */
+	    /* Heartbeat log is optional (disabled by default) */
+	#if (SYS_UPTIME_LOG_ENABLE)
+	    if (HAL_GetTick() - last_alive_tick >= 5000u) {
+	        last_alive_tick = HAL_GetTick();
+	        snprintf(msg_buf, sizeof(msg_buf), "SYS: Uptime %lu sec\r\n", (unsigned long)(last_alive_tick/1000u));
+	        System_Log(msg_buf);
+	    }
+	#endif
+	    /* USER CODE END WHILE */
+
+	    /* USER CODE BEGIN 3 */
 	}
 	/* USER CODE END 3 */
 }

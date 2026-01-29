@@ -1,5 +1,6 @@
-/* app.c - With FSM */
+/* app.c - With FSM and KEYBOARD */
 #include "app.h"
+#include "keyboard.h"
 #include "cdc_logger.h"
 #include <stdio.h>
 #include <string.h>
@@ -24,7 +25,7 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
     CDC_Log(">>> GKL protocol ready");
     
     /* Init pump manager */
-    PumpMgr_Init(&s_app.mgr, 1000);
+    PumpMgr_Init(&s_app.mgr, 250);
     PumpMgr_Add(&s_app.mgr, 1, &s_app.proto1, 0, 1);
     PumpMgr_Add(&s_app.mgr, 2, &s_app.proto2, 0, 2);
     
@@ -67,19 +68,38 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
     /* Init UI */
     UI_Init(&s_app.ui, &s_app.trk1_fsm, &s_app.trk2_fsm, &s_app.settings);
     
+    /* Init keyboard */
+    KEYBOARD_Init();
+
     CDC_Log(">>> APP_Init complete");
 }
 
 void APP_Task(void)
 {
+    /* Run managers */
     PumpMgr_Task(&s_app.mgr);
     TrxFSM_Task(&s_app.trk1_fsm);
     TrxFSM_Task(&s_app.trk2_fsm);
-    UI_Task(&s_app.ui, 0);
     Settings_Task(&s_app.settings);
+
+    /* Read keyboard */
+    char key = KEYBOARD_GetKey();
+    if (key != 0) {
+        /* Log key press */
+        char msg[16];
+        snprintf(msg, sizeof(msg), "KEY: %c", key);
+        CDC_Log(msg);
+
+        /* Pass to UI */
+        UI_Task(&s_app.ui, key);
+    } else {
+        /* Periodic UI update */
+        UI_Task(&s_app.ui, 0);
+    }
 }
 
 void APP_OnKeyPress(char key)
 {
+    /* Direct key injection (if needed) */
     UI_Task(&s_app.ui, key);
 }
