@@ -1,4 +1,4 @@
-/* app.c - ORIGINAL WORKING VERSION */
+/* app.c - With FSM */
 #include "app.h"
 #include "cdc_logger.h"
 #include <stdio.h>
@@ -12,38 +12,36 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
     
     memset(&s_app, 0, sizeof(s_app));
     
-    /* Initialize GKL protocol */
+    /* Init protocol */
     PumpProtoGKL_Init(&s_app.gkl1, huart_trk1);
     PumpProtoGKL_SetTag(&s_app.gkl1, "TRK1");
+    PumpProtoGKL_Bind(&s_app.proto1, &s_app.gkl1);
     
     PumpProtoGKL_Init(&s_app.gkl2, huart_trk2);
     PumpProtoGKL_SetTag(&s_app.gkl2, "TRK2");
-    
-    PumpProtoGKL_Bind(&s_app.proto1, &s_app.gkl1);
     PumpProtoGKL_Bind(&s_app.proto2, &s_app.gkl2);
     
-    CDC_Log(">>> GKL protocol instances ready");
+    CDC_Log(">>> GKL protocol ready");
     
-    /* Initialize pump manager */
+    /* Init pump manager */
     PumpMgr_Init(&s_app.mgr, 1000);
-    PumpMgr_Add(&s_app.mgr, 1u, &s_app.proto1, 0u, 1u);
-    PumpMgr_Add(&s_app.mgr, 2u, &s_app.proto2, 0u, 2u);
+    PumpMgr_Add(&s_app.mgr, 1, &s_app.proto1, 0, 1);
+    PumpMgr_Add(&s_app.mgr, 2, &s_app.proto2, 0, 2);
     
     /* Set default prices */
-    PumpDevice *d1 = PumpMgr_Get(&s_app.mgr, 1u);
-    PumpDevice *d2 = PumpMgr_Get(&s_app.mgr, 2u);
-    if (d1) d1->price = 1122u;
-    if (d2) d2->price = 2233u;
+    PumpDevice *d1 = PumpMgr_Get(&s_app.mgr, 1);
+    PumpDevice *d2 = PumpMgr_Get(&s_app.mgr, 2);
+    if (d1) d1->price = 1122;
+    if (d2) d2->price = 2233;
     
-    /* Load settings from EEPROM */
+    /* Load settings */
     Settings_Init(&s_app.settings, hi2c);
-    if (Settings_Load(&s_app.settings))
-    {
+    if (Settings_Load(&s_app.settings)) {
         CDC_Log(">>> Settings loaded from EEPROM");
         Settings_ApplyToPumpMgr(&s_app.settings, &s_app.mgr);
         
-        d1 = PumpMgr_Get(&s_app.mgr, 1u);
-        d2 = PumpMgr_Get(&s_app.mgr, 2u);
+        d1 = PumpMgr_Get(&s_app.mgr, 1);
+        d2 = PumpMgr_Get(&s_app.mgr, 2);
         if (d1) {
             char msg[64];
             snprintf(msg, sizeof(msg), ">>> TRK1: addr=%u price=%lu",
@@ -56,14 +54,18 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
                     (unsigned)d2->slave_addr, (unsigned long)d2->price);
             CDC_Log(msg);
         }
-    }
-    else
-    {
+    } else {
         CDC_Log(">>> Settings not found, using defaults");
     }
     
-    /* Initialize UI */
-    UI_Init(&s_app.ui, &s_app.mgr, &s_app.settings);
+    /* Init FSM */
+    TrxFSM_Init(&s_app.trk1_fsm, 1, &s_app.mgr, &s_app.gkl1);
+    TrxFSM_Init(&s_app.trk2_fsm, 2, &s_app.mgr, &s_app.gkl2);
+    
+    CDC_Log(">>> FSM initialized");
+    
+    /* Init UI */
+    UI_Init(&s_app.ui, &s_app.trk1_fsm, &s_app.trk2_fsm, &s_app.settings);
     
     CDC_Log(">>> APP_Init complete");
 }
@@ -71,41 +73,13 @@ void APP_Init(UART_HandleTypeDef *huart_trk1, UART_HandleTypeDef *huart_trk2, I2
 void APP_Task(void)
 {
     PumpMgr_Task(&s_app.mgr);
-    
-    /* Handle events from pump manager */
-    PumpEvent ev;
-    while (APP_PopEvent(&ev))
-    {
-        if (ev.type == PUMP_EVT_TOTALIZER)
-        {
-            UI_HandleTotalizerEvent(&s_app.ui, ev.nozzle, ev.totalizer);
-        }
-    }
-    
+    TrxFSM_Task(&s_app.trk1_fsm);
+    TrxFSM_Task(&s_app.trk2_fsm);
     UI_Task(&s_app.ui, 0);
     Settings_Task(&s_app.settings);
 }
 
-void APP_PushEvent(PumpEvent *ev)
+void APP_OnKeyPress(char key)
 {
-    if (!ev) return;
-    
-    uint8_t next = (s_app.event_queue.head + 1u) & 7u;
-    if (next != s_app.event_queue.tail)
-    {
-        s_app.event_queue.events[s_app.event_queue.head] = *ev;
-        s_app.event_queue.head = next;
-    }
-}
-
-bool APP_PopEvent(PumpEvent *ev)
-{
-    if (s_app.event_queue.tail == s_app.event_queue.head)
-        return false;
-        
-    if (ev)
-        *ev = s_app.event_queue.events[s_app.event_queue.tail];
-        
-    s_app.event_queue.tail = (s_app.event_queue.tail + 1u) & 7u;
-    return true;
+    UI_Task(&s_app.ui, key);
 }

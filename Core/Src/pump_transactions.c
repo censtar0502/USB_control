@@ -28,7 +28,7 @@ static void log_frame(uint8_t ctrl, uint8_t slave, char cmd, const uint8_t *data
 {
     uint8_t raw[32];
     uint8_t raw_len = 0;
-
+    
     /* Build frame */
     raw[0] = 0x02;  /* STX */
     raw[1] = ctrl;
@@ -38,18 +38,18 @@ static void log_frame(uint8_t ctrl, uint8_t slave, char cmd, const uint8_t *data
         raw[4 + i] = data[i];
     }
     raw_len = 4 + data_len;
-
+    
     /* Calculate checksum */
     uint8_t crc = 0;
     for (uint8_t i = 1; i < raw_len; i++) {
         crc ^= raw[i];
     }
     raw[raw_len++] = crc;
-
+    
     /* Format as compact string */
     char line[80];
     char *p = line;
-
+    
     for (uint8_t i = 0; i < raw_len; i++) {
         uint8_t b = raw[i];
         if (b == 0x02) { p += sprintf(p, "<STX>"); }
@@ -88,7 +88,7 @@ static void log_frame(uint8_t ctrl, uint8_t slave, char cmd, const uint8_t *data
         else { p += sprintf(p, "<%02X>", b); }
     }
     *p = '\0';
-
+    
     CDC_Log(line);  /* FIXED: only one parameter */
 }
 
@@ -130,9 +130,9 @@ bool PumpTrans_PresetMoney(GKL_Link *gkl, uint8_t ctrl, uint8_t slave,
 bool PumpTrans_Stop(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 {
     if (!gkl || gkl->state != GKL_STATE_IDLE) return false;
-
+    
     log_frame(ctrl, slave, 'B', NULL, 0);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'B', NULL, 0, 'B') == GKL_OK);
 }
 
@@ -140,9 +140,9 @@ bool PumpTrans_Stop(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 bool PumpTrans_Resume(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 {
     if (!gkl || gkl->state != GKL_STATE_IDLE) return false;
-
+    
     log_frame(ctrl, slave, 'G', NULL, 0);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'G', NULL, 0, 'G') == GKL_OK);
 }
 
@@ -150,9 +150,9 @@ bool PumpTrans_Resume(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 bool PumpTrans_End(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 {
     if (!gkl || gkl->state != GKL_STATE_IDLE) return false;
-
+    
     log_frame(ctrl, slave, 'N', NULL, 0);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'N', NULL, 0, 'N') == GKL_OK);
 }
 
@@ -163,7 +163,7 @@ bool PumpTrans_PollRealtimeVolume(GKL_Link *gkl, uint8_t ctrl, uint8_t slave, ui
     
     uint8_t data[1] = {nozzle};
     log_frame(ctrl, slave, 'L', data, 1);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'L', data, 1, 'L') == GKL_OK);
 }
 
@@ -174,7 +174,7 @@ bool PumpTrans_PollRealtimeMoney(GKL_Link *gkl, uint8_t ctrl, uint8_t slave, uin
     
     uint8_t data[1] = {nozzle};
     log_frame(ctrl, slave, 'R', data, 1);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'R', data, 1, 'R') == GKL_OK);
 }
 
@@ -185,7 +185,7 @@ bool PumpTrans_ReadTotalizer(GKL_Link *gkl, uint8_t ctrl, uint8_t slave, uint8_t
     
     uint8_t data[1] = {nozzle};
     log_frame(ctrl, slave, 'C', data, 1);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'C', data, 1, 'C') == GKL_OK);
 }
 
@@ -193,8 +193,8 @@ bool PumpTrans_ReadTotalizer(GKL_Link *gkl, uint8_t ctrl, uint8_t slave, uint8_t
 bool PumpTrans_ReadTransaction(GKL_Link *gkl, uint8_t ctrl, uint8_t slave)
 {
     if (!gkl || gkl->state != GKL_STATE_IDLE) return false;
-
+    
     log_frame(ctrl, slave, 'T', NULL, 0);
-
+    
     return (GKL_Send(gkl, ctrl, slave, 'T', NULL, 0, 'T') == GKL_OK);
 }
